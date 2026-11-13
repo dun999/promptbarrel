@@ -1,0 +1,15 @@
+[package]
+name = "barrel"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Barrel: prepaid AI inference that pays the provider only against a model TEE signature."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5.30.1"
+hex = "0.4"
+barrel-core = { path = "../barrel-core" }

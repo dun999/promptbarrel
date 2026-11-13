@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Barrel · AI credits with proof of which model ran</title>
+<meta name="description" content="Prepay AI inference into a NEAR contract. The operator is paid per answer, only when the model's own TEE has signed it. Whatever you don't use comes back.">
+<meta name="theme-color" content="#fafaf9">
+<meta property="og:title" content="Barrel · AI credits with proof of which model ran">
+<meta property="og:description" content="The operator is paid per answer, only when the model's TEE signed it. Unused credit is refunded.">
+<link rel="icon" href="assets/img/mark.svg" type="image/svg+xml">
+<link rel="preload" href="assets/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/geist-pixel-square.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/tokens.css">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body class="site">
+
+<header class="nav" id="nav">
+  <div class="frame nav-in">
+    <a class="brand" href="./" aria-label="Barrel home"><img src="assets/img/mark.svg" alt="" width="24" height="24"><span>Barrel</span></a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#how">How it works</a>
+      <a href="#faq">FAQ</a>
+      <a href="docs/">Docs</a>
+    </nav>
+    <a class="btn btn-primary btn-sm nav-cta" href="app/">Launch app <span class="arr" aria-hidden="true">↗</span></a>
+  </div>
+</header>
+
+<main>
+
+<!-- One barrel. The hero and the four-step story share a sticky stage: scrolling
+     moves the barrel to the centre, then pushes the camera into it. -->
+<section class="intro" aria-label="Barrel">
+  <div class="track" id="track">
+    <span class="anchor" id="how" aria-hidden="true"></span>
+    <div class="stage" id="stage">
+      <div class="frame rails" aria-hidden="true"></div>
+      <canvas class="barrel" id="barrel" aria-hidden="true"></canvas>
+
+      <div class="hero" id="hero">
+        <div class="col hero-grid">
+          <div class="hero-src hatch"><p class="chip" id="st-src"><i class="dot"></i><span>Reading the contract from your browser…</span></p></div>
+          <div class="hero-stats">
+            <div class="hstat"><b class="pixel num" data-live="escrow">–</b><span class="cap">Escrow, <span data-unit>USDC</span></span></div>
+            <div class="hstat"><b class="pixel num" data-live="count">–</b><span class="cap">Proven answers</span></div>
+            <div class="hstat"><b class="pixel num" data-live="units">–</b><span class="cap">Units delivered</span></div>
+          </div>
+
+          <div class="hero-copy">
+            <p class="chip chip-fill"><i class="dot live"></i><span>Live on <span data-net>NEAR mainnet</span></span></p>
+            <h1 class="display"><span class="l">AI credits with proof</span> <span class="l">of which model ran,</span> <span class="l alt">or the money back.</span></h1>
+            <p class="lead hero-lead">Prepay inference into a NEAR contract. The operator is paid per answer, only when the model's own TEE has signed it. Whatever you don't use comes back.</p>
+            <div class="hero-ctas">
+              <a class="btn btn-primary btn-lg" href="app/">Launch app <span class="arr" aria-hidden="true">↗</span></a>
+              <a class="btn btn-secondary btn-lg" href="#faq">Read the FAQ</a>
+            </div>
+          </div>
+          <div class="hero-art" id="hero-art" aria-hidden="true">
+            <span class="cap art-tl">1 Barrel = 1,000,000 units</span>
+            <span class="cap art-br" data-faq="model">z-ai/glm-5.3-flash</span>
+          </div>
+
+          <div class="hero-runs">
+            <span class="cap">Runs on</span>
+            <a href="https://near.org" target="_blank" rel="noopener"><svg class="logo logo-near" aria-hidden="true"><use href="assets/img/logos.svg#near"/></svg>NEAR Protocol</a>
+            <a href="https://cloud.near.ai" target="_blank" rel="noopener"><svg class="logo logo-nearai-mark" aria-hidden="true"><use href="assets/img/logos.svg#nearai-mark"/></svg>NEAR AI Cloud</a>
+            <span><svg class="logo logo-intel" aria-hidden="true"><use href="assets/img/logos.svg#intel"/></svg><span class="sr">Intel </span>TDX</span>
+            <span><svg class="logo logo-nvidia" aria-hidden="true"><use href="assets/img/logos.svg#nvidia"/></svg>NVIDIA</span>
+          </div>
+          <div class="hero-fill hatch"></div>
+        </div>
+      </div>
+
+      <div class="scenes" id="scenes">
+        <div class="scene scene-escrow" data-scene="0">
+          <div class="tag brk"><span class="cap">Escrow held</span><b class="pixel num" data-live="escrow">–</b><span class="cap" data-unit>USDC</span></div>
+        </div>
+
+        <div class="scene scene-stack" data-scene="1">
+          <div class="col stack-box" id="stack-box">
+            <div class="stack-art" id="stack-art"></div>
+            <ol class="layers" id="layers">
+              <li class="layer" data-layer="3"><h3 class="h4"><i class="n">4</i>NEAR contract<svg class="logo logo-near" aria-hidden="true"><use href="assets/img/logos.svg#near"/></svg></h3><p class="small">Verifies the model's signature and the agent's ack with the native <code>ed25519_verify</code>, then pays.</p></li>
+              <li class="layer" data-layer="2"><h3 class="h4"><i class="n">3</i>Model signing key<svg class="logo logo-nearai" aria-hidden="true"><use href="assets/img/logos.svg#nearai"/></svg></h3><p class="small">Ed25519, inside the TEE. Registered only after the attestation binds it to a fresh nonce.</p></li>
+              <li class="layer" data-layer="1"><h3 class="h4"><i class="n">2</i>Intel TDX confidential VM<svg class="logo logo-intel" aria-hidden="true"><use href="assets/img/logos.svg#intel"/></svg></h3><p class="small">Intel DCAP quote verification and an event-log replay to RTMR3 show what software holds the key.</p></li>
+              <li class="layer" data-layer="0"><h3 class="h4"><i class="n">1</i>NVIDIA confidential GPU<svg class="logo logo-nvidia" aria-hidden="true"><use href="assets/img/logos.svg#nvidia"/></svg></h3><p class="small">Runs the model weights in confidential-computing mode. GPU evidence is not checked yet.</p></li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="scene scene-sig" data-scene="2">
+          <div class="panel sig brk">
+            <div class="sig-row">
+              <span class="cap">Signed text</span>
+              <p class="sig-text mono"><span class="seg" data-k="model" id="sig-model">z-ai/glm-5.3-flash</span><i>:</i><span class="seg" data-k="sha256(request)" id="sig-req">29809c43…2437</span><i>:</i><span class="seg" data-k="sha256(answer)" id="sig-res">20c229a6…3525</span></p>
+            </div>
+            <div class="sig-row">
+              <span class="cap">Ed25519 signature</span>
+              <div class="sig-hex mono" id="sig-hex"></div>
+            </div>
+            <div class="sig-foot">
+              <span class="status"><i class="dot ok"></i>Verifies</span>
+              <span class="label mono" id="sig-key">key 5a0210f2…caff</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="scene scene-settle" data-scene="3">
+          <div class="panel settle brk">
+            <div class="settle-head">
+              <b class="mono">settle(tank 1, seq 2)</b>
+              <span class="label mono" id="settle-contract">barrel-v1.promptbarrel.near</span>
+            </div>
+            <ol class="settle-checks">
+              <li>Sequence number is the tank's next one</li>
+              <li>Ack verifies under the tank's spend key</li>
+              <li>Model key is registered for this model and live</li>
+              <li>Model signature verifies over model : request : answer</li>
+              <li>Units fit in the tank</li>
+            </ol>
+            <div class="settle-pay">
+              <span><b class="num">58</b> units burned</span>
+              <span class="arr" aria-hidden="true">→</span>
+              <span>operator paid <b class="num">0.000035</b> <span data-unit>USDC</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="steps" id="steps">
+        <div class="frame steps-in">
+          <div class="step" data-step="0"><span class="bar"><i></i></span><span class="n pixel">01</span><b>Escrow</b><p>You buy Barrels with USDC. The money waits in a NEAR contract, not with the operator.</p></div>
+          <div class="step" data-step="1"><span class="bar"><i></i></span><span class="n pixel">02</span><b>Enclave</b><p>The model runs in an Intel TDX VM. Its key was registered only after attestation.</p></div>
+          <div class="step" data-step="2"><span class="bar"><i></i></span><span class="n pixel">03</span><b>Signature</b><p>Each answer is signed over the model name and both hashes. One changed byte fails.</p></div>
+          <div class="step" data-step="3"><span class="bar"><i></i></span><span class="n pixel">04</span><b>Settlement</b><p>The contract checks the model's signature and your agent's ack, then pays per unit.</p></div>
+          <p class="steps-cap" id="steps-cap" aria-live="polite"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Versus -->
+<section class="sec" id="compare">
+  <div class="frame">
+    <header class="head">
+      <h2 class="h2" data-reveal><span class="muted">Same credits.</span> One new property.</h2>
+      <p class="lead head-r" data-reveal>Prepaid AI credits ask you to trust the provider. Barrel asks the hardware, and pays only when it answers.</p>
+    </header>
+    <div class="vsx" id="vsx" data-reveal>
+      <article class="vsx-item on" data-art="stream">
+        <button class="vsx-tab" type="button" aria-expanded="true" aria-controls="vsx-1"><span class="n pixel" aria-hidden="true">01</span><span class="t">When the operator is paid</span></button>
+        <div class="vsx-panel" id="vsx-1">
+          <canvas class="vsx-art" aria-hidden="true"></canvas>
+          <div class="vsx-body">
+            <h3 class="vsx-title"><span class="n pixel" aria-hidden="true">01</span>When the operator is paid</h3>
+            <div class="vsx-cmp">
+              <div class="vsx-a"><span class="cap">Prepaid credits</span><p>Up front</p></div>
+              <div class="vsx-b"><span class="cap">Barrel</span><p>Per answer, after the proof checks</p></div>
+            </div>
+          </div>
+        </div>
+      </article>
+      <article class="vsx-item" data-art="rings">
+        <button class="vsx-tab" type="button" aria-expanded="false" aria-controls="vsx-2"><span class="n pixel" aria-hidden="true">02</span><span class="t">Which model ran</span></button>
+        <div class="vsx-panel" id="vsx-2">
+          <canvas class="vsx-art" aria-hidden="true"></canvas>
+          <div class="vsx-body">
+            <h3 class="vsx-title"><span class="n pixel" aria-hidden="true">02</span>Which model ran</h3>
+            <div class="vsx-cmp">
+              <div class="vsx-a"><span class="cap">Prepaid credits</span><p>Trust the provider</p></div>
+              <div class="vsx-b"><span class="cap">Barrel</span><p>Signed by a TEE key registered for that model</p></div>
+            </div>
+          </div>
+        </div>
+      </article>
+      <article class="vsx-item" data-art="tiles">
+        <button class="vsx-tab" type="button" aria-expanded="false" aria-controls="vsx-3"><span class="n pixel" aria-hidden="true">03</span><span class="t">A cheaper model swapped in</span></button>
+        <div class="vsx-panel" id="vsx-3">
+          <canvas class="vsx-art" aria-hidden="true"></canvas>
+          <div class="vsx-body">
+            <h3 class="vsx-title"><span class="n pixel" aria-hidden="true">03</span>A cheaper model swapped in</h3>
+            <div class="vsx-cmp">
+              <div class="vsx-a"><span class="cap">Prepaid credits</span><p>Invisible</p></div>
+              <div class="vsx-b"><span class="cap">Barrel</span><p>The signature fails and nothing is paid</p></div>
+            </div>
+          </div>
+        </div>
+      </article>
+      <article class="vsx-item" data-art="tide">
+        <button class="vsx-tab" type="button" aria-expanded="false" aria-controls="vsx-4"><span class="n pixel" aria-hidden="true">04</span><span class="t">Unused balance</span></button>
+        <div class="vsx-panel" id="vsx-4">
+          <canvas class="vsx-art" aria-hidden="true"></canvas>
+          <div class="vsx-body">
+            <h3 class="vsx-title"><span class="n pixel" aria-hidden="true">04</span>Unused balance</h3>
+            <div class="vsx-cmp">
+              <div class="vsx-a"><span class="cap">Prepaid credits</span><p>Stays with the provider</p></div>
+              <div class="vsx-b"><span class="cap">Barrel</span><p>Refunded from escrow</p></div>
+            </div>
+          </div>
+        </div>
+      </article>
+      <article class="vsx-item" data-art="bars">
+        <button class="vsx-tab" type="button" aria-expanded="false" aria-controls="vsx-5"><span class="n pixel" aria-hidden="true">05</span><span class="t">A budget for an agent</span></button>
+        <div class="vsx-panel" id="vsx-5">
+          <canvas class="vsx-art" aria-hidden="true"></canvas>
+          <div class="vsx-body">
+            <h3 class="vsx-title"><span class="n pixel" aria-hidden="true">05</span>A budget for an agent</h3>
+            <div class="vsx-cmp">
+              <div class="vsx-a"><span class="cap">Prepaid credits</span><p>Share an API key</p></div>
+              <div class="vsx-b"><span class="cap">Barrel</span><p>A spend-only key, capped by the tank</p></div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="sec" id="faq">
+  <div class="frame faq-frame">
+    <div class="faq-side hatch" aria-hidden="true"></div>
+    <div class="faq-wrap">
+      <h2 class="h2" data-reveal>Frequently asked questions</h2>
+    <div class="faq-list" data-reveal>
+      <details class="faq" name="faq">
+        <summary>What is Barrel?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
+        <div class="faq-a"><p>Prepaid AI inference with proof of which model ran. You pay USDC into a NEAR contract. The operator is paid per answer, and only after the contract checks that the named model's TEE signed that exact answer. What you don't use comes back to you.</p></div>
+      </details>
+      <details class="faq" name="faq">
+        <summary>What does an answer cost?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
+        <div class="faq-a"><p>You buy Barrels of one model at a fixed price: <span data-faq="price">0.60</span> <span data-unit>USDC</span> per Barrel for <span data-faq="model">z-ai/glm-5.3-flash</span>. One Barrel is 1,000,000 units. An answer costs one unit per completion token plus <span data-faq="weight">16%</span> of a unit per prompt token.</p></div>
+      </details>
+      <details class="faq" name="faq">
+        <summary>When does the operator get paid?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
+        <div class="faq-a"><p>Per answer, when it settles. Before any money moves, the contract checks that the answer is the tank's next one, that your agent signed an ack for it, that the model key is registered and live, that the model's signature covers this exact request and answer, and that the units fit in the tank. Then it pays the operator for those units.</p></div>
+      </details>
+      <details class="faq" name="faq">
+        <summary>What does the model's signature prove?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
+        <div class="faq-a"><p>That a TEE holding the model's registered key signed the model name and the hashes of this request and this answer. A cheaper model swapped in, or one changed byte in the answer, fails the check and nothing is paid. The key is registered only after an Intel TDX attestation check, and the evidence is published.</p></div>
+      </details>
+      <details class="faq" name="faq">
+        <summary>What does a receipt not prove?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
+        <div class="faq-a"><p>It does not identify the machine that served the answer. NVIDIA GPU evidence is not checked yet. In this version Barrel's registrar checks attestations off-chain, though anyone can repeat the checks with <code>barrel audit</code>. The operator sees prompts and answers in plaintext.</p></div>
+      </details>
+      <details class="faq" name="faq">
+        <summary>What happens if a check fails?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
+        <div class="faq-a"><p>Your agent does not sign the ack, so the operator cannot settle and nothing is paid. The units stay in your tank.</p></div>
+      </details>
+      <details class="faq" name="faq">
+        <summary>How do I give my agent a tank?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
+        <div class="faq-a"><p>In the app, buy Barrels and fill a tank. The tank gets its own spend key, and the app gives you a <code>claude mcp add</code> command with it filled in. The key can pay for proven answers and nothing else: it cannot transfer, withdraw or refund.</p></div>
+      </details>
+      <details class="faq" name="faq">
+        <summary>How do I get unused money back?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
+        <div class="faq-a"><p>Unlock a tank, wait <span data-faq="unlock">10 minutes</span>, and withdraw its Barrels to your account. When the series closes, refund the Barrels you hold for the USDC behind them.</p></div>
+      </details>
+      <details class="faq" name="faq">
+        <summary>Do I need real money?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
+        <div class="faq-a" id="faq-money"><p>Yes. Barrel runs on NEAR mainnet with Circle's USDC. Pay with USDC on NEAR from a NEAR wallet, or with USDC on another chain through NEAR Intents. While the contract is new it caps how much escrow it holds in total.</p></div>
+      </details>
+    </div>
+    </div>
+    <div class="faq-side hatch" aria-hidden="true"></div>
+  </div>
+</section>
+
+</main>
+
+<!-- CTA and footer: one ink block -->
+<footer class="foot" id="foot">
+  <div class="cta-band">
+    <canvas class="foot-dither" id="foot-dither" aria-hidden="true"></canvas>
+    <div class="frame foot-frame">
+      <div class="cta" data-reveal>
+        <div class="cta-l">
+          <h2 class="display">A tank, <span class="alt">not a wallet.</span></h2>
+          <p class="lead">Connect a NEAR wallet, buy Barrels, fill a tank, and hand your agent its spend key over MCP. It pays only for answers the model can prove.</p>
+        </div>
+        <a class="btn btn-invert btn-lg" href="app/">Launch app <span class="arr" aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+  </div>
+  <div class="frame foot-frame">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="brand" href="./"><img src="assets/img/mark-invert.svg" alt="" width="24" height="24"><span>Barrel</span></a>
+        <p class="small">AI credits with proof of which model ran, or the money back.</p>
+      </div>
+      <nav class="foot-col" aria-label="Product"><span class="cap">Product</span><a href="#how">How it works</a><a href="#faq">FAQ</a><a href="docs/">Docs</a></nav>
+      <nav class="foot-col" aria-label="Proof"><span class="cap">Proof</span><a id="foot-contract" href="https://nearblocks.io/address/barrel-v1.promptbarrel.near" target="_blank" rel="noopener">Contract on NearBlocks</a><a href="app/#escrow">Live escrow</a><a href="app/#verify">Verify a receipt</a></nav>
+      <nav class="foot-col" aria-label="Built on"><span class="cap">Built on</span><a href="https://near.org" target="_blank" rel="noopener">NEAR Protocol</a><a href="https://cloud.near.ai" target="_blank" rel="noopener">NEAR AI Cloud</a><a href="https://github.com/nearai/nearai-cloud-verifier" target="_blank" rel="noopener">NEAR AI verifier</a></nav>
+    </div>
+    <div class="foot-bar small"><span>Built for the NEAR hackathon. MIT licence.</span><span id="foot-net">NEAR mainnet. Circle USDC, under low escrow caps.</span></div>
+    <div class="wordmark" id="wordmark" aria-hidden="true"><span>Barrel</span><span class="lit">Barrel</span></div>
+  </div>
+</footer>
+
+<script type="module" src="assets/js/site.js"></script>
+</body>
+</html>

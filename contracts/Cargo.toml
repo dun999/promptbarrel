@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["barrel", "barrel-core", "test-usdc"]
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+strip = true
+panic = "abort"
+overflow-checks = true

@@ -1,0 +1,31 @@
+{
+  "name": "barrel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Barrel: prepaid AI inference that pays the provider only when a TEE proves the named model produced the answer.",
+  "scripts": {
+    "build:contract": "./scripts/build-contract.sh",
+    "test:rust": "./scripts/test-rust.sh",
+    "e2e": "pnpm --filter @barrel/e2e test",
+    "test": "pnpm --filter @barrel/verifier test && pnpm test:rust",
+    "spike:s1": "tsx scripts/spike-s1.ts",
+    "barrel": "tsx packages/sdk/src/cli.ts",
+    "pump": "tsx apps/pump/src/main.ts",
+    "deploy:testnet": "tsx scripts/deploy.ts --network testnet",
+    "deploy:mainnet": "tsx scripts/deploy.ts --network mainnet",
+    "web": "tsx apps/web/serve.ts",
+    "mcp": "tsx apps/mcp/src/server.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@barrel/sdk": "workspace:*",
+    "@barrel/verifier": "workspace:*",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

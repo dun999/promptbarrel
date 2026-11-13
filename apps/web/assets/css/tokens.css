@@ -1,0 +1,95 @@
+/* Barrel design tokens. One file holds every visual decision.
+ *
+ *  Colour   Ink on paper, plus one blue. Near-black text on an off-white page.
+ *           The blue marks the thing being proven or the step that is active:
+ *           the dithered barrel, the lit plate, a progress bar. Buttons stay
+ *           ink. Green and red appear only for a check that passed or failed.
+ *  Type     Geist for reading. Geist Pixel for the headline and for numbers
+ *           read off the chain. Geist Mono, small and uppercase, for data
+ *           labels, and at text size for hashes, keys and code.
+ *  Frame    The page is a drawing sheet: two rails run its full height, each
+ *           section is ruled off across the whole window, and cells sit in the
+ *           grid between them. Empty cells are hatched.
+ *  Texture  Images are 1-bit: an 8 × 8 ordered dither, square dots.
+ *  Shape    Square. 2px on controls and panels, 0 on cells.
+ */
+
+@font-face { font-family: "Geist"; src: url("../fonts/geist.woff2") format("woff2"); font-weight: 300 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("../fonts/geist-mono.woff2") format("woff2"); font-weight: 400 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Pixel"; src: url("../fonts/geist-pixel-square.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Pixel Dot"; src: url("../fonts/geist-pixel-circle.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+
+:root {
+  color-scheme: light;
+
+  /* ── Colour ──────────────────────────────────────────────── */
+  --bg:       #fafaf9;   /* page */
+  --bg-2:     #f3f3f1;   /* hover, inset wells */
+  --surface:  #ffffff;   /* panels */
+  --ink:      #0a0a0a;   /* primary text, primary button, data */
+  --ink-2:    #3a3a38;   /* body text */
+  --muted:    #6b6b69;   /* secondary text: 5.1:1 on --bg */
+  --faint:    #a3a3a0;   /* inactive, never for text that must be read */
+  --line:     #dededa;   /* rails, section rules, cell edges */
+  --line-2:   #cfcfca;   /* control borders, hatching */
+
+  --accent:      #1717e6;   /* the proven thing, the active step */
+  --accent-2:    #0d0da6;   /* its shaded side */
+  --accent-wash: #e9e9ff;   /* its lit side */
+  --accent-hi:   #6b6bff;   /* the same blue on ink */
+  --accent-rgb:  23, 23, 230;
+
+  --ok:       #12a150;
+  --ok-wash:  #ebf6ef;
+  --bad:      #e5484d;
+  --bad-wash: #fdeeee;
+
+  /* data: the blue for what was paid on proof, then three steps of ink */
+  --d1: #1717e6;
+  --d2: #0a0a0a;
+  --d3: #a3a3a0;
+  --d4: #d6d6d2;
+
+  /* ── Type ────────────────────────────────────────────────── */
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-pixel: "Geist Pixel", "Geist Mono", ui-monospace, monospace;
+  --font-dot: "Geist Pixel Dot", "Geist Pixel", "Geist Mono", ui-monospace, monospace;
+
+  --fs-11: 11px;  --lh-11: 16px;
+  --fs-12: 12px;  --lh-12: 16px;
+  --fs-13: 13px;  --lh-13: 20px;
+  --fs-14: 14px;  --lh-14: 20px;
+  --fs-15: 15px;  --lh-15: 24px;
+  --fs-16: 16px;  --lh-16: 24px;
+  --fs-18: 18px;  --lh-18: 28px;
+  --fs-20: 20px;  --lh-20: 28px;
+  --fs-24: 24px;  --lh-24: 32px;
+  --fs-32: 32px;  --lh-32: 40px;
+  --fs-h2: clamp(30px, 3.3vw, 46px);
+  --fs-display: clamp(31px, 4.1vw, 60px);
+
+  /* ── Space (8pt, 4pt half step) ──────────────────────────── */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px;
+  --s-7: 32px; --s-8: 40px; --s-9: 48px; --s-10: 64px; --s-11: 96px; --s-12: 128px;
+
+  /* ── Shape ───────────────────────────────────────────────── */
+  --r-1: 2px;   /* controls */
+  --r-2: 2px;   /* panels */
+
+  /* ── Texture ─────────────────────────────────────────────── */
+  --hatch: repeating-linear-gradient(112deg, transparent 0 6px, var(--line-2) 6px 7px);
+
+  /* ── Size ────────────────────────────────────────────────── */
+  --h-sm: 32px; --h-md: 40px; --h-lg: 48px;
+  --nav-h: 64px;
+  --container: 1280px;
+  --margin: clamp(12px, 4vw, 48px);   /* window edge to rail */
+  --pad: clamp(16px, 2.6vw, 36px);    /* rail to content */
+  --gutter: 24px;
+  --section-y: clamp(56px, 7vw, 104px);
+
+  /* ── Motion ──────────────────────────────────────────────── */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --d-1: 120ms; --d-2: 200ms; --d-3: 320ms; --d-4: 600ms;
+}

@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buy · Barrel</title>
+<meta name="description" content="Buy Barrels of proven AI inference with a NEAR wallet, fill a tank for your agent, and pay only for answers the model's TEE has signed.">
+<meta name="theme-color" content="#fafaf9">
+<link rel="icon" href="../assets/img/mark.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/geist-pixel-square.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/app.css">
+</head>
+<body class="app">
+
+<aside class="side" id="side" aria-label="App navigation">
+  <div class="side-top">
+    <a class="brand" href="../"><img src="../assets/img/mark.svg" alt="" width="22" height="22"><span>Barrel</span></a>
+  </div>
+  <nav class="side-nav">
+    <span class="side-label">Use</span>
+    <a href="#buy"><svg class="icon"><use href="../assets/img/icons.svg#coins"/></svg>Buy</a>
+    <a href="#tanks"><svg class="icon"><use href="../assets/img/icons.svg#tank"/></svg>Tanks</a>
+    <a href="#ask"><svg class="icon"><use href="../assets/img/icons.svg#send"/></svg>Ask</a>
+    <span class="side-label">Network</span>
+    <a href="#escrow"><svg class="icon"><use href="../assets/img/icons.svg#layers"/></svg>Escrow</a>
+    <a href="#settlements"><svg class="icon"><use href="../assets/img/icons.svg#list"/></svg>Settlements</a>
+    <a href="#verify"><svg class="icon"><use href="../assets/img/icons.svg#shield"/></svg>Verify a receipt</a>
+    <a href="#contract"><svg class="icon"><use href="../assets/img/icons.svg#barrel"/></svg>Contract</a>
+  </nav>
+  <div class="side-foot">
+    <span class="status"><i class="dot live"></i><span id="net-name">NEAR mainnet</span></span>
+    <a class="crumb mono" id="crumb" href="https://nearblocks.io/address/barrel-v1.promptbarrel.near" target="_blank" rel="noopener"><span id="crumb-contract">barrel-v1.promptbarrel.near</span><svg class="icon"><use href="../assets/img/icons.svg#external"/></svg></a>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+
+<div class="main">
+  <header class="top" id="top">
+    <div class="top-l">
+      <button class="icon-btn menu" id="menu" aria-label="Open navigation"><svg><use href="../assets/img/icons.svg#menu"/></svg></button>
+      <h1 class="top-title" id="top-title">Buy</h1>
+    </div>
+    <div class="top-r">
+      <span class="status sync" id="sync"><i class="dot"></i><span>Connecting</span></span>
+      <div class="acct" id="acct" hidden>
+        <span class="acct-id mono" id="acct-id"></span>
+        <button class="btn btn-secondary btn-sm" id="disconnect">Disconnect</button>
+      </div>
+      <button class="btn btn-primary btn-sm" id="connect">Connect wallet</button>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="banner" id="banner" hidden></div>
+
+    <!-- ── Buy ─────────────────────────────────────────────────────────── -->
+    <section class="page" data-page="buy" aria-label="Buy">
+      <div class="row">
+        <section class="panel s7">
+          <header class="panel-head">
+            <div><span class="step">1</span><h2 class="panel-title">Buy Barrels</h2></div>
+            <span class="label">USDC in, held in escrow</span>
+          </header>
+          <div class="panel-body">
+            <div class="series-pick" id="series-pick" role="radiogroup" aria-label="Series"></div>
+            <form class="buy" id="buy-form" novalidate>
+              <label class="field">
+                <span class="label">You pay</span>
+                <span class="input"><input id="buy-amount" inputmode="decimal" autocomplete="off" value="1" aria-label="Amount in USDC"><span class="unit" data-unit>USDC</span></span>
+              </label>
+              <div class="field">
+                <span class="label">You get</span>
+                <span class="input readout"><b class="num" id="buy-units">–</b><span class="unit">Barrels</span></span>
+              </div>
+              <button class="btn btn-primary btn-lg" id="buy-btn" type="submit">Buy Barrels</button>
+            </form>
+            <p class="note">The operator is paid from escrow only per answer, after the contract checks the model's signature. What you don't use is refunded when the series closes.</p>
+            <div class="xc" id="xc" hidden>
+              <div class="xc-head"><b>Or pay with USDC on another chain</b><span class="label">NEAR Intents swaps it and delivers it to Barrel; the Barrels land in your NEAR account.</span></div>
+              <form class="xc-form" id="xc-form" novalidate>
+                <div class="field">
+                  <span class="label">From</span>
+                  <select id="xc-chain" aria-label="Origin chain" data-dd></select>
+                </div>
+                <label class="field">
+                  <span class="label">Refund address there</span>
+                  <span class="input"><input id="xc-refund" autocomplete="off" spellcheck="false" placeholder="0x…" aria-label="Your address on the origin chain"></span>
+                </label>
+                <button class="btn btn-secondary btn-lg" id="xc-btn" type="submit">Get a deposit address</button>
+              </form>
+              <div class="xc-deposit" id="xc-deposit" hidden></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel s5">
+          <header class="panel-head">
+            <h2 class="panel-title">Your account</h2>
+            <span class="label mono acct-name" id="acct-name">Not connected</span>
+          </header>
+          <div class="panel-body">
+            <div class="blocks">
+              <div class="block">
+                <span class="label"><span data-unit>USDC</span> balance</span>
+                <b class="num" id="me-usdc">–</b>
+                <button class="link-btn" id="mint" type="button" hidden>Mint 100 test USDC</button>
+              </div>
+              <div class="block">
+                <span class="label">Barrels held</span>
+                <b class="num" id="me-barrels">–</b>
+                <span class="label" id="me-barrels-s">&nbsp;</span>
+              </div>
+            </div>
+            <div class="refund" id="refund" hidden></div>
+            <div class="next" id="next-fill" hidden>
+              <div><b>Next: fill a tank</b><p class="label">Put Barrels under a spend key you can hand to an agent.</p></div>
+              <a class="btn btn-secondary btn-sm" href="#tanks">Fill a tank</a>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ── Tanks ───────────────────────────────────────────────────────── -->
+    <section class="page" data-page="tanks" aria-label="Tanks" hidden>
+      <section class="panel">
+        <header class="panel-head">
+          <div><span class="step">2</span><h2 class="panel-title">Fill a tank</h2></div>
+          <span class="label" id="fill-series">&nbsp;</span>
+        </header>
+        <div class="panel-body">
+          <div class="fill-row">
+            <div class="block">
+              <span class="label">Barrels you can fill</span>
+              <b class="num" id="fill-held">–</b>
+              <span class="label" id="fill-held-s">Connect a wallet</span>
+            </div>
+            <form class="fill" id="fill-form" novalidate>
+              <label class="field">
+                <span class="label">Put into a new tank</span>
+                <span class="input"><input id="fill-amount" inputmode="decimal" autocomplete="off" aria-label="Barrels for the tank"><span class="unit">Barrels</span></span>
+              </label>
+              <label class="field">
+                <span class="label">Pay an agent for a job (optional)</span>
+                <span class="input"><input id="fill-agent" autocomplete="off" spellcheck="false" placeholder="agent's NEAR account" aria-label="The agent's NEAR account"></span>
+              </label>
+              <button class="btn btn-primary btn-lg" id="fill-btn" type="submit">Fill tank</button>
+            </form>
+          </div>
+          <p class="note">The tank gets its own spend key, made in this browser. Give it to an agent: it can pay for proven answers and nothing else. With an agent account it is a job tank: the agent thinks on this money, and when you accept the work, whatever is left is paid to the agent in USDC. Reject it and the rest comes back to you. Filling takes a 0.01 NEAR storage deposit.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <header class="panel-head">
+          <h2 class="panel-title">Your tanks</h2>
+          <button class="btn btn-secondary btn-sm" id="import-key" type="button">Import a tank key</button>
+        </header>
+        <div class="panel-body">
+          <div class="tank-grid" id="tank-list"></div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ── Ask ─────────────────────────────────────────────────────────── -->
+    <section class="page" data-page="ask" aria-label="Ask" hidden>
+      <section class="panel">
+        <header class="panel-head">
+          <div><span class="step">3</span><h2 class="panel-title">Ask</h2></div>
+          <span class="label" id="ask-model">&nbsp;</span>
+        </header>
+        <div class="ask">
+          <form class="ask-l" id="ask-form" novalidate>
+            <div class="field">
+              <span class="label">Pay from</span>
+              <select id="ask-tank" aria-label="Tank" data-dd></select>
+            </div>
+            <p class="label ask-hint" id="ask-hint" hidden></p>
+            <label class="field grow">
+              <span class="label">Question</span>
+              <textarea id="ask-q" rows="5" placeholder="In one sentence: what does a TEE attestation prove?"></textarea>
+            </label>
+            <button class="btn btn-primary btn-lg" id="ask-btn" type="submit">Ask</button>
+            <p class="note">Your browser signs the request with the tank key, checks the model's signature on the answer, and only then signs the ack that lets the operator be paid.</p>
+          </form>
+          <div class="ask-r" id="ask-out">
+            <div class="vempty"><p class="label">Answers appear here with every check your browser ran before paying.</p></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ── Escrow ──────────────────────────────────────────────────────── -->
+    <section class="page" data-page="escrow" aria-label="Escrow" hidden>
+      <div class="kpis" aria-label="Network numbers">
+        <div class="tile"><span class="label">Escrow held</span><p class="kpi-v"><b class="num" id="k-escrow">–</b><span data-unit>USDC</span></p><span class="label" id="k-escrow-s">&nbsp;</span></div>
+        <div class="tile"><span class="label">Answers paid on proof</span><p class="kpi-v"><b class="num" id="k-count">–</b></p><span class="label" id="k-count-s">&nbsp;</span></div>
+        <div class="tile"><span class="label">Released to operators</span><p class="kpi-v"><b class="num" id="k-released">–</b><span data-unit>USDC</span></p><span class="label" id="k-released-s">&nbsp;</span></div>
+        <div class="tile"><span class="label">Model key</span><p class="kpi-v"><b id="k-key">–</b></p><span class="label" id="k-key-s">&nbsp;</span></div>
+      </div>
+
+      <div class="row">
+        <section class="panel s7">
+          <header class="panel-head">
+            <h2 class="panel-title" id="series-title">Series</h2>
+            <span class="status" id="series-state"><i class="dot"></i>–</span>
+          </header>
+          <div class="panel-body">
+            <p class="label series-sub" id="series-sub">&nbsp;</p>
+            <div class="blocks three">
+              <div class="block"><span class="label">Price per Barrel</span><b class="num" id="m-price">–</b><span class="label">1 Barrel is 1,000,000 units</span></div>
+              <div class="block"><span class="label">Window closes</span><b class="num" id="m-window">–</b><span class="label" id="m-window-s">&nbsp;</span></div>
+              <div class="block"><span class="label">Barrels minted</span><b class="num" id="m-minted">–</b><span class="label" id="m-minted-s">&nbsp;</span></div>
+            </div>
+            <div class="split">
+              <div class="split-head"><h3 class="h4">Where the escrow is</h3><span class="label num" id="split-total">&nbsp;</span></div>
+              <div class="seg-bar" id="seg-bar" role="img" aria-label="Escrow split"></div>
+              <div class="legend" id="legend"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel s5">
+          <header class="panel-head">
+            <h2 class="panel-title">Model key</h2>
+            <span class="status" id="key-state"><i class="dot"></i>–</span>
+          </header>
+          <div class="panel-body">
+            <div>
+              <span class="label" id="key-model">&nbsp;</span>
+              <div class="keyline"><span class="mono" id="key-hex">–</span><button class="icon-btn" id="key-copy" aria-label="Copy the key"><svg><use href="../assets/img/icons.svg#copy"/></svg></button></div>
+            </div>
+            <div class="ttl">
+              <div class="ttl-head"><span class="label">Time to live</span><span class="label num" id="ttl-t">–</span></div>
+              <div class="meter"><i id="ttl-bar"></i></div>
+            </div>
+            <dl class="kv">
+              <div><dt>Registered</dt><dd class="mono" id="key-reg">–</dd></div>
+              <div><dt>Expires</dt><dd class="mono" id="key-exp">–</dd></div>
+              <div><dt>Evidence hash</dt><dd class="mono" id="key-ev">–</dd></div>
+            </dl>
+            <div class="attest">
+              <span class="label">Checked before registration</span>
+              <ul>
+                <li><svg class="icon"><use href="../assets/img/icons.svg#check"/></svg>Intel DCAP quote verification</li>
+                <li><svg class="icon"><use href="../assets/img/icons.svg#check"/></svg>Report data binds the key and a fresh nonce</li>
+                <li><svg class="icon"><use href="../assets/img/icons.svg#check"/></svg>Event log replays to RTMR3</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ── Settlements ─────────────────────────────────────────────────── -->
+    <section class="page" data-page="settlements" aria-label="Settlements" hidden>
+      <section class="panel">
+        <header class="panel-head">
+          <h2 class="panel-title">Settlements</h2>
+          <span class="label num" id="set-count">–</span>
+        </header>
+        <div class="panel-body">
+          <div class="chart-head"><h3 class="h4">Units billed per answer</h3><span class="label" id="chart-note">&nbsp;</span></div>
+          <div class="chart" id="chart"></div>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Answer</th><th class="r">Units</th><th>Model key</th><th>Signature</th><th>Settled, UTC</th><th>Proof</th></tr></thead>
+            <tbody id="rows"><tr><td colspan="6" class="muted">Loading</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+
+    <!-- ── Verify ──────────────────────────────────────────────────────── -->
+    <section class="page" data-page="verify" aria-label="Verify a receipt" hidden>
+      <section class="panel">
+        <header class="panel-head">
+          <h2 class="panel-title">Verify a receipt</h2>
+          <span class="status" id="v-state"><i class="dot"></i>Not checked</span>
+        </header>
+        <div class="vbar">
+          <button class="btn btn-primary btn-sm" id="v-check">Verify receipt</button>
+          <button class="btn btn-secondary btn-sm" id="v-tamper">Tamper with the answer</button>
+          <button class="btn btn-secondary btn-sm" id="v-gateway">Load a gateway signature</button>
+          <button class="btn btn-ghost btn-sm" id="v-reset">Reset</button>
+        </div>
+        <div class="vbody">
+          <div class="vcol">
+            <span class="label" id="v-src">Receipt</span>
+            <div class="qa"><p class="q" id="v-q">…</p><p class="a" id="v-a">…</p></div>
+            <dl class="kv">
+              <div><dt>Model</dt><dd class="mono" id="v-model">–</dd></div>
+              <div><dt>Signed by</dt><dd id="v-kind">–</dd></div>
+              <div><dt>Signing key</dt><dd class="mono" id="v-key">–</dd></div>
+              <div><dt>Request hash</dt><dd class="mono" id="v-req">–</dd></div>
+              <div><dt>Answer hash</dt><dd class="mono" id="v-res">–</dd></div>
+            </dl>
+            <details class="json" id="json">
+              <summary>Edit the receipt JSON</summary>
+              <textarea id="receipt" spellcheck="false" wrap="off" aria-label="Receipt JSON"></textarea>
+            </details>
+          </div>
+          <div class="vcol">
+            <span class="label">Checks</span>
+            <div class="vresult" id="v-result"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <!-- ── Contract ────────────────────────────────────────────────────── -->
+    <section class="page" data-page="contract" aria-label="Contract" hidden>
+      <div class="row">
+        <section class="panel s5">
+          <header class="panel-head">
+            <h2 class="panel-title">Contract</h2>
+            <span class="status" id="c-paused"><i class="dot"></i>–</span>
+          </header>
+          <div class="panel-body">
+            <dl class="kv" id="c-kv"></dl>
+          </div>
+        </section>
+
+        <section class="panel s7">
+          <header class="panel-head"><h2 class="panel-title">What a receipt does not prove</h2><span class="label">v1</span></header>
+          <div class="panel-body">
+            <div class="blocks two limits">
+              <div class="block"><h3 class="h4">Which machine served it</h3><p class="label">A TEE holding the model's key signed these bytes. The receipt does not identify the serving instance.</p></div>
+              <div class="block"><h3 class="h4">Who registered the key</h3><p class="label">Barrel's registrar checks attestations off‑chain. <code>barrel audit</code> repeats the checks.</p></div>
+              <div class="block"><h3 class="h4">GPU evidence</h3><p class="label">NVIDIA GPU evidence is not checked yet. Guarantees rest on Intel TDX.</p></div>
+              <div class="block"><h3 class="h4">Prompt privacy</h3><p class="label">The operator's Pump sees prompts and answers in plaintext.</p></div>
+              <div class="block"><h3 class="h4">Streaming</h3><p class="label">Streamed answers are signed by the gateway, so the Pump refuses to stream.</p></div>
+              <div class="block" id="limit-money"><h3 class="h4">Real money, low caps</h3><p class="label">This is mainnet USDC. The contract caps how much it holds, and it is upgradeable by its owner key.</p></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <footer class="app-foot label"><span>Every number here is read from the chain by your browser. Every action is a transaction your wallet signs.</span><span>Barrel v1 · MIT</span></footer>
+  </main>
+</div>
+
+<dialog class="dlg" id="dlg" aria-labelledby="dlg-title">
+  <form method="dialog" class="dlg-in" id="dlg-form">
+    <header class="dlg-head"><h2 class="panel-title" id="dlg-title">&nbsp;</h2><button class="icon-btn" value="cancel" aria-label="Close"><svg><use href="../assets/img/icons.svg#x"/></svg></button></header>
+    <div class="dlg-body" id="dlg-body"></div>
+  </form>
+</dialog>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="tip" id="tip" role="tooltip" hidden></div>
+<script type="module" src="../assets/js/app.js"></script>
+</body>
+</html>

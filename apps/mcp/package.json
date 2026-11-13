@@ -1,0 +1,20 @@
+{
+  "name": "@barrel/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "MCP server: give an agent a Barrel tank. It can ask, check its balance and verify receipts; it cannot move funds.",
+  "scripts": {
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@barrel/sdk": "workspace:*",
+    "@barrel/verifier": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@barrel/pump",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "The operator's gateway: serves inference to tanks and settles against model receipts.",
+  "exports": {
+    ".": "./src/pump.ts"
+  },
+  "scripts": {
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@barrel/sdk": "workspace:*",
+    "@barrel/verifier": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

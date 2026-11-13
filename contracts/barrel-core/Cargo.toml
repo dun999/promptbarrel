@@ -1,0 +1,10 @@
+[package]
+name = "barrel-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Dependency-light rules of Barrel: the two signed texts and the escrow arithmetic."
+
+[dependencies]
+hex = "0.4"

@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs · Barrel</title>
+<meta name="description" content="How Barrel works: buying Barrels, tanks and spend keys, paid-on-proof settlement, agents over MCP, the Pump API, the contract, attestation, and running an operator.">
+<meta name="theme-color" content="#fafaf9">
+<meta property="og:title" content="Docs · Barrel">
+<meta property="og:description" content="Prepaid AI inference on NEAR, paid per answer only when the model's TEE signed it.">
+<link rel="icon" href="../assets/img/mark.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../assets/fonts/geist-pixel-square.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/site.css">
+<link rel="stylesheet" href="../assets/css/docs.css">
+</head>
+<body class="site docs">
+
+<header class="nav" id="nav">
+  <div class="frame nav-in">
+    <a class="brand" href="../" aria-label="Barrel home"><img src="../assets/img/mark.svg" alt="" width="24" height="24"><span>Barrel</span></a>
+    <nav class="nav-links" aria-label="Site">
+      <a href="../#how">How it works</a>
+      <a href="../#faq">FAQ</a>
+      <a href="./" aria-current="page">Docs</a>
+    </nav>
+    <a class="btn btn-primary btn-sm nav-cta" href="../app/">Launch app <span class="arr" aria-hidden="true">↗</span></a>
+  </div>
+</header>
+
+<main>
+
+<!-- Title: what the page covers, and the deployment it describes -->
+<section class="dtop">
+  <div class="frame dtop-in">
+    <div class="dtop-l">
+      <p class="chip chip-fill" id="d-live"><i class="dot live"></i><span>Live on <span data-d="net">NEAR mainnet</span></span></p>
+      <h1 class="display"><span class="l">Documentation</span> <span class="l alt">for Barrel v1.</span></h1>
+      <p class="lead">Barrel holds prepaid AI inference in a NEAR contract and pays the operator per answer, only when the model's own TEE has signed it. This page covers using it, handing it to an agent, the protocol underneath, and running an operator.</p>
+    </div>
+    <dl class="dtop-r">
+      <div class="fact"><dt class="cap">Contract</dt><dd class="mono"><a class="link" data-d-link="contract" href="https://nearblocks.io/address/barrel-v1.promptbarrel.near" target="_blank" rel="noopener"><span data-d="contract">barrel-v1.promptbarrel.near</span></a></dd></div>
+      <div class="fact"><dt class="cap">Model</dt><dd class="mono" data-d="model">z-ai/glm-5.3-flash</dd></div>
+      <div class="fact"><dt class="cap">Price per Barrel</dt><dd><b class="pixel num" data-d="price">0.60</b> <span data-d="unit">USDC</span></dd></div>
+      <div class="fact"><dt class="cap">Escrow held now</dt><dd><b class="pixel num" data-d="escrow">–</b> <span data-d="unit">USDC</span></dd></div>
+    </dl>
+  </div>
+</section>
+
+<div class="sec dsec">
+<div class="frame dframe">
+
+  <aside class="toc-cell">
+    <details class="toc" id="toc" open>
+      <summary>Contents<svg class="chev" aria-hidden="true"><use href="../assets/img/icons.svg#chevron"/></svg></summary>
+      <nav aria-label="Contents">
+        <span class="cap">Start</span>
+        <a href="#overview">Overview</a>
+        <a href="#quickstart">Quick start</a>
+        <a href="#concepts">Concepts</a>
+        <span class="cap">Use</span>
+        <a href="#buy">Buying Barrels</a>
+        <a href="#tanks">Tanks and spend keys</a>
+        <a href="#ask">Asking</a>
+        <a href="#jobs">Job tanks</a>
+        <a href="#refunds">Withdrawals and refunds</a>
+        <span class="cap">Agents</span>
+        <a href="#mcp">MCP server</a>
+        <a href="#cli">Command line</a>
+        <a href="#x402">HTTP 402 and x402</a>
+        <span class="cap">Protocol</span>
+        <a href="#pricing">Pricing and units</a>
+        <a href="#signatures">Signatures</a>
+        <a href="#settle">Settlement</a>
+        <a href="#attest">Attestation</a>
+        <a href="#pump-api">Pump API</a>
+        <a href="#contract">Contract reference</a>
+        <span class="cap">Operate</span>
+        <a href="#operate">Run a Pump</a>
+        <a href="#deployments">Deployments</a>
+        <a href="#limits">Trust and limits</a>
+        <a href="#roadmap">Roadmap</a>
+      </nav>
+    </details>
+  </aside>
+
+  <article class="doc" id="doc">
+
+    <!-- ── Start ───────────────────────────────────────────────────────── -->
+    <div class="band"><span class="cap">Start</span></div>
+
+    <section class="ds" id="overview">
+      <header class="ds-head"><span class="n pixel">01</span><h2>Overview</h2></header>
+      <p>Barrel sells prepaid inference from one named model. You pay USDC into a NEAR contract and receive Barrels. The operator who serves the model is paid out of that escrow per answer, and only after the contract has checked two signatures: the model's, made inside its TEE over the exact request and answer, and your client's acknowledgement of that answer. Whatever you do not spend comes back to you.</p>
+      <div class="rule-b"><b>No proof, no ack. No ack, no payment.</b><span>A cheaper model swapped in, or one changed byte in the answer, fails the check, and the units stay in your tank.</span></div>
+      <ol class="flow">
+        <li><span class="n pixel">1</span><b>Buy</b><p>USDC becomes Barrels. The USDC waits in the contract's escrow.</p></li>
+        <li><span class="n pixel">2</span><b>Fill</b><p>Barrels go into a tank under a spend key that can pay for answers and nothing else.</p></li>
+        <li><span class="n pixel">3</span><b>Ask</b><p>The request goes to the operator's Pump and on to the model's TEE on NEAR AI Cloud.</p></li>
+        <li><span class="n pixel">4</span><b>Settle</b><p>Your client checks the model's signature and signs an ack. The contract checks both and pays.</p></li>
+        <li><span class="n pixel">5</span><b>Refund</b><p>After the series closes, unused Barrels burn for the USDC behind them.</p></li>
+      </ol>
+      <p>Barrel runs on <a class="link" href="https://near.org" target="_blank" rel="noopener">NEAR Protocol</a> (the contract, the escrow and the native <code>ed25519_verify</code>), <a class="link" href="https://cloud.near.ai" target="_blank" rel="noopener">NEAR AI Cloud</a> (models in Intel TDX and NVIDIA confidential computing, with per-answer signatures), and NEAR Intents (USDC from other chains).</p>
+    </section>
+
+    <section class="ds" id="quickstart">
+      <header class="ds-head"><span class="n pixel">02</span><h2>Quick start</h2></header>
+      <p>You need a NEAR mainnet account in MyNearWallet, HOT or Intear with a little NEAR for gas and the 0.01 NEAR tank deposit, and USDC, either on NEAR or on another chain.</p>
+      <ol class="qs">
+        <li><span class="n pixel">01</span><div><b>Connect</b><p>Open the <a class="link" href="../app/">app</a> and connect your wallet. Every write is a transaction your wallet shows you first.</p></div></li>
+        <li><span class="n pixel">02</span><div><b>Buy Barrels</b><p>Pick a series, enter an amount of USDC and sign. Or pay with USDC on another chain: the app gets you a deposit address from NEAR Intents and the Barrels land in your NEAR account.</p></div></li>
+        <li><span class="n pixel">03</span><div><b>Fill a tank</b><p>Your browser makes a fresh spend key and keeps it in local storage. Your wallet signs <code>fill</code> with the key's public half and a 0.01 NEAR storage deposit.</p></div></li>
+        <li><span class="n pixel">04</span><div><b>Ask</b><p>The browser signs the request with the tank key and sends it to the series' Pump. It checks the model's signature itself and with the contract's free <code>verify_receipt</code> view, and only then signs the ack. The app links the settlement transaction.</p></div></li>
+        <li><span class="n pixel">05</span><div><b>Hand it to an agent</b><p>The app shows a <code>claude mcp add</code> command with the tank id and key filled in, and offers the key as a file.</p></div></li>
+        <li><span class="n pixel">06</span><div><b>Take the rest back</b><p>Unlock a tank and withdraw its Barrels after <span data-d="unlock">10 minutes</span>. After the series closes, refund unused Barrels for their USDC.</p></div></li>
+      </ol>
+      <div class="note-b"><span class="cap">Before you buy</span><p>Asking needs the series' Pump at an address your browser can reach: a public HTTPS address, or this machine. The app marks a series whose Pump it cannot reach before you buy, and <a class="link" href="#deployments">Deployments</a> below shows where each series points right now.</p></div>
+    </section>
+
+    <section class="ds" id="concepts">
+      <header class="ds-head"><span class="n pixel">03</span><h2>Concepts</h2></header>
+      <dl class="dl">
+        <div><dt>Barrel</dt><dd>1,000,000 units of inference from one series. A NEP-245 token whose id is the series id, with 6 decimals, so one Barrel reads as 1.0.</dd></div>
+        <div><dt>Unit</dt><dd>What an answer is metered in: one completion token, plus a weighted share of each prompt token.</dd></div>
+        <div><dt>Grade</dt><dd>A model id and its prompt-token weight, for example <code>glm-5.3-flash</code> → <code>z-ai/glm-5.3-flash</code> at 16%. Model signing keys are registered per grade.</dd></div>
+        <div><dt>Series</dt><dd>One operator selling one grade at a fixed price until a closing time, with a cap on units and the address of its Pump. Anyone can open a series.</dd></div>
+        <div><dt>Escrow</dt><dd>The USDC behind minted Barrels. It leaves only as operator pay for a proven answer, as a refund, or as a job tank's payout to its agent.</dd></div>
+        <div><dt>Tank</dt><dd>Barrels set aside under a spend key. The account that filled it owns it.</dd></div>
+        <div><dt>Spend key</dt><dd>An Ed25519 key made for one tank. It signs requests and acks. It cannot transfer, withdraw or refund.</dd></div>
+        <div><dt>Job tank</dt><dd>A tank filled for another account, the agent. If the owner accepts the work, the leftover is paid to the agent in USDC.</dd></div>
+        <div><dt>Pump</dt><dd>The operator's gateway. It serves funded tanks, relays the exact bytes to NEAR AI Cloud and back, and settles acks on chain.</dd></div>
+        <div><dt>Receipt</dt><dd>The model id, the hashes of the request and the answer, and the model's signing key and signature over them.</dd></div>
+        <div><dt>Ack</dt><dd>The spend key's signature over the contract, tank, sequence number, both hashes and the units billed.</dd></div>
+      </dl>
+    </section>
+
+    <!-- ── Use ─────────────────────────────────────────────────────────── -->
+    <div class="band"><span class="cap">Use</span></div>
+
+    <section class="ds" id="buy">
+      <header class="ds-head"><span class="n pixel">04</span><h2>Buying Barrels</h2></header>
+      <h3>With USDC on NEAR</h3>
+      <p>A buy is one USDC transfer to the contract, <code>ft_transfer_call</code> with the message <code>{"series_id": 1}</code>. The contract mints <code>amount × 1,000,000 ÷ price</code> units to you, or to the account named in <code>"to"</code>. At <span data-d="price">0.60</span> USDC per Barrel, 1 USDC buys 1.666666 Barrels. Any part of the amount that would go past the series cap comes back in the same transaction, and a buy past the contract's total escrow cap is refused and returned.</p>
+      <h3>With USDC on another chain</h3>
+      <p>The app and the CLI quote a NEAR Intents 1Click swap whose recipient is the Barrel contract and whose message is <code>{"series_id": N, "to": "&lt;your NEAR account&gt;"}</code>. You send one deposit on the origin chain; 1Click swaps it to USDC on NEAR and delivers it with <code>ft_transfer_call</code>, and the contract mints the Barrels to your account. You never hold USDC on NEAR.</p>
+      <ul class="ticks">
+        <li>An EVM wallet in the browser can send the deposit for you; on any other chain, send the quoted amount to the deposit address yourself.</li>
+        <li>A swap not finished by the quote's deadline is refunded to your address on the origin chain.</li>
+        <li>Quotes are kept under the series' room and the global escrow cap, because a delivery the contract refuses goes back to NEAR Intents rather than to you.</li>
+        <li>Without a 1Click JWT (<code>ONECLICK_JWT</code>, CLI only) 1Click adds a 0.25% fee.</li>
+      </ul>
+      <div class="code"><button class="icon-btn" type="button" aria-label="Copy"><svg><use href="../assets/img/icons.svg#copy"/></svg></button><pre>pnpm barrel buy-from base 1 1.0 --refund-to 0xYourBaseAddress --account you.near</pre></div>
+    </section>
+
+    <section class="ds" id="tanks">
+      <header class="ds-head"><span class="n pixel">05</span><h2>Tanks and spend keys</h2></header>
+      <p><code>fill(series_id, units, key, agent?)</code> moves Barrels from your balance into a new tank under the public half of a spend key, with a 0.01 NEAR storage deposit. In the app the key is made in your browser and kept in its local storage for this site, per contract; you can download it as a file, and import a key from a file or from <code>.barrel/tanks/</code>. The CLI writes keys to <code>.barrel/tanks/&lt;contract&gt;/&lt;tank&gt;.json</code>.</p>
+      <p>Answers settle strictly in order: a tank has a next sequence number, and every request and ack names it. <code>top_up(tank_id, units)</code> adds Barrels and cancels an unlock in progress.</p>
+      <table class="dtab">
+        <thead><tr><th>State</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Active</td><td>The Pump serves it. Its key can pay for proven answers.</td></tr>
+          <tr><td>Unlocking</td><td>The owner asked for the rest back. The Pump no longer serves it. Withdraw after the unlock delay, or top up to keep using it.</td></tr>
+          <tr><td>Closed</td><td>Withdrawn, or a job tank whose leftover went to the agent or back to the owner.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="ds" id="ask">
+      <header class="ds-head"><span class="n pixel">06</span><h2>Asking</h2></header>
+      <p>The app, the CLI and the MCP server all ask the same way (<code>TankClient</code> in <code>packages/sdk</code>, and <code>apps/web/src/tank.ts</code> in the browser):</p>
+      <ol class="nums">
+        <li>Build a non-streamed chat request for the series' model with a <code>max_tokens</code>.</li>
+        <li>Work out the most units the request could cost, sign the request text with the tank key, and send it to the series' Pump.</li>
+        <li>Receive the model's exact answer bytes with a receipt and the units billed.</li>
+        <li>Check that the signature is the model TEE's (<code>provider_tee</code>), that the signed text names the model and both hashes, that the hashes match the bytes sent and received, that the contract's <code>verify_receipt</code> finds the signature valid and the key registered and live, and that the units match the answer's usage.</li>
+        <li>Only then sign the ack and send it. The Pump settles it on chain.</li>
+      </ol>
+      <p>If any check fails, no ack is signed and nothing is paid. The Pump serves a tank one answer at a time and will not serve it again until the last answer is acknowledged, so an operator can lose at most one unpaid answer per tank.</p>
+    </section>
+
+    <section class="ds" id="jobs">
+      <header class="ds-head"><span class="n pixel">07</span><h2>Job tanks</h2></header>
+      <p>Fund an agent and pay it what it does not spend. A client fills a tank naming another account as its agent and gives the agent the spend key. The agent pays for its own proven inference out of the tank while it works. Every answer it paid for is on chain with the model's signature, so the client sees what the job cost before deciding.</p>
+      <table class="dtab">
+        <thead><tr><th>Call</th><th>Who</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td><code>fill(series, units, key, agent)</code></td><td>Client</td><td>Funds the job. The agent gets the spend key.</td></tr>
+          <tr><td><code>ask</code> … <code>settle</code></td><td>Agent, Pump</td><td>Each answer is paid on proof.</td></tr>
+          <tr><td><code>accept(tank)</code></td><td>Client</td><td>Accepts the work. The Pump stops serving the tank.</td></tr>
+          <tr><td><code>withdraw(tank)</code></td><td>Client or agent</td><td>After the unlock delay, pays the leftover's USDC to the agent.</td></tr>
+          <tr><td><code>request_unlock(tank)</code></td><td>Client</td><td>Rejects the work. After the unlock delay the leftover comes back to the client.</td></tr>
+        </tbody>
+      </table>
+      <p>The agent's account must be registered with the USDC token to receive it. If it is not, the payout bounces, the tank is restored and nothing is lost; the app offers to open the agent's USDC account (<code>storage_deposit</code>) and pay again.</p>
+    </section>
+
+    <section class="ds" id="refunds">
+      <header class="ds-head"><span class="n pixel">08</span><h2>Withdrawals and refunds</h2></header>
+      <ul class="ticks">
+        <li><b>Unlock a tank.</b> <code>request_unlock(tank)</code>, then <code>withdraw(tank)</code> after the unlock delay (<span data-d="unlock">10 minutes</span>) returns its Barrels to your balance. The delay lets answers already served settle first.</li>
+        <li><b>Refund Barrels.</b> After the series closes and the settle grace (<span data-d="grace">1 hour</span>) has passed, <code>refund(series, units)</code> burns Barrels for <code>floor(units × price ÷ 1,000,000)</code> USDC. Series 1 closes <span data-d="window">Dec 31, 2026, 00:00 UTC</span>.</li>
+        <li><b>Move Barrels.</b> Barrels in your account are NEP-245 tokens: <code>mt_transfer</code> and <code>mt_transfer_call</code> work as the standard says.</li>
+      </ul>
+    </section>
+
+    <!-- ── Agents ──────────────────────────────────────────────────────── -->
+    <div class="band"><span class="cap">Agents</span></div>
+
+    <section class="ds" id="mcp">
+      <header class="ds-head"><span class="n pixel">09</span><h2>MCP server</h2></header>
+      <p><code>apps/mcp</code> is an MCP server over stdio that gives an agent one tank. The agent holds only the tank's spend key, so the most it can do is spend the tank on answers that carry a valid model signature. With a tank filled in the app, use the command it shows:</p>
+      <div class="code"><button class="icon-btn" type="button" aria-label="Copy"><svg><use href="../assets/img/icons.svg#copy"/></svg></button><pre>claude mcp add barrel \
+  -e BARREL_NETWORK=<span data-d="network">mainnet</span> \
+  -e BARREL_CONTRACT=<span data-d="contract">barrel-v1.promptbarrel.near</span> \
+  -e BARREL_TANK=&lt;tank id&gt; \
+  -e BARREL_TANK_KEY=&lt;spend key&gt; \
+  -- node /path/to/barrel/apps/mcp/bin/barrel-mcp.mjs</pre></div>
+      <table class="dtab">
+        <thead><tr><th>Tool</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>barrel_ask</code></td><td>Asks the tank's model. Takes <code>question</code>, optional <code>system</code> and <code>max_tokens</code> (default 800, at most 4096). Checks the proof before acknowledging; returns the answer, the units paid and the settlement transaction.</td></tr>
+          <tr><td><code>barrel_balance</code></td><td>Units left, the model and the price. On a job tank, also what the leftover pays the agent if the work is accepted.</td></tr>
+          <tr><td><code>barrel_verify</code></td><td>Checks a receipt (JSON or a file path): hashes, signature kind, the model in the signed text, and whether the contract has the key registered.</td></tr>
+        </tbody>
+      </table>
+      <table class="dtab">
+        <thead><tr><th>Variable</th><th>Default</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>BARREL_TANK</code></td><td>required</td><td>The tank id.</td></tr>
+          <tr><td><code>BARREL_TANK_KEY</code></td><td>–</td><td>The spend key, 64 hex characters, as the app shows it.</td></tr>
+          <tr><td><code>BARREL_TANK_KEY_FILE</code></td><td><code>.barrel/tanks/&lt;contract&gt;/&lt;tank&gt;.json</code></td><td>A key file, used when <code>BARREL_TANK_KEY</code> is not set.</td></tr>
+          <tr><td><code>BARREL_NETWORK</code></td><td><code>mainnet</code></td><td><code>mainnet</code> or <code>testnet</code>. It must match the contract's network.</td></tr>
+          <tr><td><code>BARREL_CONTRACT</code></td><td>from <code>deployments/</code></td><td>The Barrel contract.</td></tr>
+          <tr><td><code>BARREL_PUMP_URL</code></td><td>the series' endpoint</td><td>Overrides the Pump address recorded on chain.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="ds" id="cli">
+      <header class="ds-head"><span class="n pixel">10</span><h2>Command line</h2></header>
+      <p><code>pnpm barrel &lt;command&gt;</code> works on mainnet unless <code>BARREL_NETWORK=testnet</code>. On mainnet, sign with <code>--account &lt;id&gt;</code>, whose key is in <code>.barrel/mainnet/</code>.</p>
+      <table class="dtab">
+        <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>verify &lt;receipt.json&gt;</code></td><td>Checks a receipt locally and against the contract. No keys.</td></tr>
+          <tr><td><code>status</code></td><td>Grades, keys, series and recent settlements.</td></tr>
+          <tr><td><code>attest &lt;model-id&gt;</code></td><td>Runs every attestation check on a model now.</td></tr>
+          <tr><td><code>audit [grade]</code></td><td>Compares the registered keys with a fresh attestation.</td></tr>
+          <tr><td><code>buy &lt;series&gt; &lt;usdc&gt;</code></td><td>Buys Barrels with USDC on NEAR.</td></tr>
+          <tr><td><code>buy-from &lt;chain&gt; &lt;series&gt; &lt;usdc&gt;</code></td><td>Buys with USDC on another chain. Needs <code>--refund-to</code>; <code>--to</code> names the receiving NEAR account.</td></tr>
+          <tr><td><code>fill &lt;series&gt; &lt;units&gt;</code></td><td>Fills a tank under a new spend key. <code>--agent &lt;account&gt;</code> makes it a job tank.</td></tr>
+          <tr><td><code>ask &lt;tank&gt; "&lt;question&gt;"</code></td><td>Asks through the series' Pump and pays only with proof. Saves the receipt.</td></tr>
+          <tr><td><code>accept &lt;tank&gt;</code></td><td>Accepts a job tank's work.</td></tr>
+          <tr><td><code>unlock</code>, <code>withdraw &lt;tank&gt;</code></td><td>Takes a tank's Barrels back, or pays an accepted job's agent.</td></tr>
+          <tr><td><code>refund &lt;series&gt; [units]</code></td><td>Refunds Barrels after the series closes.</td></tr>
+          <tr><td><code>account</code></td><td>Testnet only: a faucet-funded development account.</td></tr>
+        </tbody>
+      </table>
+      <p>Options: <code>--contract</code>, <code>--account</code>, <code>--pump &lt;url&gt;</code>, <code>--json</code>.</p>
+    </section>
+
+    <section class="ds" id="x402">
+      <header class="ds-head"><span class="n pixel">11</span><h2>HTTP 402 and x402</h2></header>
+      <div class="state"><span class="status"><i class="dot"></i>Not in v1</span><p>Barrel v1 does not implement x402. There is no x402 payment-requirements response, no <code>X-PAYMENT</code> header and no facilitator. Inference is paid from a tank, settled on NEAR per answer against the model's signature.</p></div>
+      <p>What the Pump does use is the HTTP status <code>402 Payment Required</code> in its plain sense: it answers 402, with a JSON <code>error</code>, when a tank cannot pay for a request.</p>
+      <table class="dtab">
+        <thead><tr><th>Status</th><th>Reason the Pump gives</th></tr></thead>
+        <tbody>
+          <tr><td>402</td><td>The tank is closed.</td></tr>
+          <tr><td>402</td><td>The client accepted this job; the tank is paying out its leftover.</td></tr>
+          <tr><td>402</td><td>The tank is unlocking; top it up to keep using it.</td></tr>
+          <tr><td>402</td><td>The series has expired.</td></tr>
+          <tr><td>402</td><td>Acknowledge the previous answer first.</td></tr>
+          <tr><td>402</td><td>The tank holds fewer units than this request may need.</td></tr>
+        </tbody>
+      </table>
+      <p>Why not x402 per request: an x402 payment settles before the answer exists, while Barrel pays only after the model's signature over the finished answer checks out. On the roadmap, x402 comes in as a way to fund a tank, not to pay per answer: a Pump would answer a request that comes with no tank with 402 and an x402 offer, and the payment would buy Barrels into a tank for the payer's key. That is not built.</p>
+    </section>
+
+    <!-- ── Protocol ────────────────────────────────────────────────────── -->
+    <div class="band"><span class="cap">Protocol</span></div>
+
+    <section class="ds" id="pricing">
+      <header class="ds-head"><span class="n pixel">12</span><h2>Pricing and units</h2></header>
+      <div class="formula mono">units = completion_tokens + ⌈prompt_tokens × input_weight_bps ÷ 10,000⌉</div>
+      <p>Series 1 sells <span data-d="model">z-ai/glm-5.3-flash</span> at <span data-d="price">0.60</span> USDC per Barrel with prompt tokens weighted <span data-d="weight">16%</span>. That is 0.60 USDC per million completion tokens and 0.096 USDC per million prompt tokens. An answer with 420 prompt and 180 completion tokens costs 180 + 68 = 248 units, about 0.00015 USDC.</p>
+      <ul class="ticks">
+        <li>Before serving, the Pump requires a ceiling: the request's bytes counted as prompt tokens, plus <code>max_tokens</code>. The request signature commits to it, the tank must hold it, and the bill is the metered units, never more than the ceiling.</li>
+        <li>The operator is paid <code>floor(cumulative_burned × price ÷ 1,000,000)</code> minus what was already released, so rounding never adds up against either side.</li>
+      </ul>
+    </section>
+
+    <section class="ds" id="signatures">
+      <header class="ds-head"><span class="n pixel">13</span><h2>Signatures</h2></header>
+      <p>Three Ed25519 signatures, over three texts. Hashes are SHA-256 of the exact bytes, as 64 lowercase hex characters.</p>
+      <div class="sigs">
+        <div><span class="cap">Model, inside its TEE</span><p class="mono">&lt;model_id&gt;:&lt;sha256(request)&gt;:&lt;sha256(response)&gt;</p></div>
+        <div><span class="cap">Request, by the tank key</span><p class="mono">barrel:v1:req:&lt;contract&gt;:&lt;tank&gt;:&lt;seq&gt;:&lt;sha256(request)&gt;:&lt;max_units&gt;</p></div>
+        <div><span class="cap">Ack, by the tank key</span><p class="mono">barrel:v1:ack:&lt;contract&gt;:&lt;tank&gt;:&lt;seq&gt;:&lt;request_hash&gt;:&lt;response_hash&gt;:&lt;units&gt;</p></div>
+      </div>
+      <p>NEAR AI Cloud signs every non-streamed answer with the model's key. Streamed answers are signed by the gateway instead, over text that names no model, so the Pump refuses streaming and the contract would never pay a gateway signature: the gateway's key is not registered for any grade. A receipt looks like this:</p>
+      <div class="code"><button class="icon-btn" type="button" aria-label="Copy"><svg><use href="../assets/img/icons.svg#copy"/></svg></button><pre>{
+  "grade_id": "glm-5.3-flash",
+  "model_id": "z-ai/glm-5.3-flash",
+  "request_hash": "29809c43…2437",
+  "response_hash": "20c229a6…3525",
+  "signing_algo": "ed25519",
+  "signing_address": "5a0210f2…caff",
+  "signature": "49603d99…",
+  "signature_kind": "provider_tee",
+  "text": "z-ai/glm-5.3-flash:29809c43…:20c229a6…",
+  "request_b64": "…",
+  "response_b64": "…"
+}</pre></div>
+      <p>Check one in the browser on the app's <a class="link" href="../app/#verify">Verify a receipt</a> page, or with <code>pnpm barrel verify &lt;file&gt;</code>.</p>
+    </section>
+
+    <section class="ds" id="settle">
+      <header class="ds-head"><span class="n pixel">14</span><h2>Settlement</h2></header>
+      <p><code>settle(tank_id, items)</code> takes 1 to 40 items. Each carries <code>seq</code>, <code>request_hash</code>, <code>response_hash</code>, <code>units</code>, <code>ack_sig</code>, <code>tee_key</code> and <code>tee_sig</code>. For each one, before any money moves, the contract checks:</p>
+      <ol class="nums">
+        <li>The sequence number is the tank's next one: no replay, no reordering.</li>
+        <li>The ack verifies under the tank's spend key.</li>
+        <li>The model key is registered for the series' grade and has not expired or been revoked.</li>
+        <li>The model signature verifies over <code>&lt;model_id&gt;:&lt;request_hash&gt;:&lt;response_hash&gt;</code>, with <code>model_id</code> taken from the grade, not from the caller.</li>
+        <li>The units fit in the tank.</li>
+      </ol>
+      <p>Then it burns the units and pays the series operator. Signatures use NEAR's native <code>ed25519_verify</code>: the first item costs about 8.6 TGas including the payout, each further item about 1 TGas. Settlement is accepted until the series closes plus the settle grace. A payout the token refuses is kept as payable, and the operator collects it with <code>claim(series_id)</code>.</p>
+    </section>
+
+    <section class="ds" id="attest">
+      <header class="ds-head"><span class="n pixel">15</span><h2>Attestation</h2></header>
+      <p>The contract pays only signatures from keys registered for the grade. Before the owner registers a key with <code>add_key</code>, Barrel's registrar checks NEAR AI Cloud's attestation for the model:</p>
+      <ul class="checks-l">
+        <li><svg class="icon"><use href="../assets/img/icons.svg#check"/></svg>Intel DCAP verification of the TDX quote, with Intel's collateral.</li>
+        <li><svg class="icon"><use href="../assets/img/icons.svg#check"/></svg>The report data binds the signing key and a fresh nonce.</li>
+        <li><svg class="icon"><use href="../assets/img/icons.svg#check"/></svg>The event log replays to RTMR3, which shows what software holds the key.</li>
+      </ul>
+      <p>The evidence (report, nonce, collateral) is published in <code>deployments/evidence/</code>, and its hash is stored with the key on chain. Keys expire after the grade's time to live (<span data-d="ttl">24 hours</span> for series 1). When the key is about to lapse, a Pump that holds the owner key attests again and registers the new key; without it, answers whose key is not live are refused and not billed. Anyone can repeat the checks:</p>
+      <div class="code"><button class="icon-btn" type="button" aria-label="Copy"><svg><use href="../assets/img/icons.svg#copy"/></svg></button><pre>pnpm barrel attest z-ai/glm-5.3-flash    # → ATTESTED
+pnpm barrel audit                        # registered keys vs. a fresh attestation</pre></div>
+      <p>NVIDIA GPU evidence is not checked yet. The checks follow NEAR AI's reference verifier, <a class="link" href="https://github.com/nearai/nearai-cloud-verifier" target="_blank" rel="noopener">nearai-cloud-verifier</a>.</p>
+    </section>
+
+    <section class="ds" id="pump-api">
+      <header class="ds-head"><span class="n pixel">16</span><h2>Pump API</h2></header>
+      <p>A Pump serves one series. Clients normally use <code>TankClient</code>; this is the wire format underneath.</p>
+      <table class="dtab">
+        <thead><tr><th>Route</th><th>Body</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET /</code>, <code>GET /v1/info</code></td><td>–</td><td>Contract, series, operator, model, price, input weight, closing time, unlock delay, answers served, units settled.</td></tr>
+          <tr><td><code>POST /v1/chat/completions</code></td><td>OpenAI-style chat request for the series' model. <code>max_tokens</code> 1 to 4096, no <code>stream</code>.</td><td>The model's exact answer bytes, with headers <code>x-barrel-receipt</code> (base64 receipt JSON), <code>x-barrel-units</code> and <code>x-barrel-seq</code>.</td></tr>
+          <tr><td><code>POST /v1/ack</code></td><td><code>{"tank_id", "seq", "ack_sig"}</code></td><td><code>{"ok", "queued", "settle_tx"}</code></td></tr>
+        </tbody>
+      </table>
+      <p>A completion request carries four headers: <code>x-barrel-tank</code>, <code>x-barrel-seq</code>, <code>x-barrel-max-units</code>, and <code>x-barrel-sig</code>, the tank key's signature over the request text in <a class="link" href="#signatures">Signatures</a>.</p>
+      <table class="dtab">
+        <thead><tr><th>Status</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td>400</td><td>Body not JSON, another model, streaming asked for, <code>max_tokens</code> out of range, or a ceiling below the request's worst case.</td></tr>
+          <tr><td>401</td><td>Missing headers, or a request not signed by the tank key.</td></tr>
+          <tr><td>402</td><td>The tank cannot pay. See <a class="link" href="#x402">HTTP 402 and x402</a>.</td></tr>
+          <tr><td>404</td><td>The tank is not on this series, or no answer is waiting for this ack.</td></tr>
+          <tr><td>409</td><td>A request for this tank is already in flight, or the sequence number is not the next one.</td></tr>
+          <tr><td>413</td><td>The body is over 1 MB.</td></tr>
+          <tr><td>502</td><td>The model returned no signature, an unusable one, one the contract would not accept, or no usage. That answer is not billed.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="ds" id="contract">
+      <header class="ds-head"><span class="n pixel">17</span><h2>Contract reference</h2></header>
+      <p>Rust, near-sdk 5.30. Source in <code>contracts/barrel</code>; the rules it shares with its tests are in <code>contracts/barrel-core</code>.</p>
+      <h3>Views (free)</h3>
+      <table class="dtab">
+        <tbody>
+          <tr><td><code>get_config</code>, <code>get_total_escrow</code></td><td>Owner, USDC token, delays, caps, pause flag; total USDC held.</td></tr>
+          <tr><td><code>get_series_list</code>, <code>get_series</code>, <code>refund_opens_at</code></td><td>Series with their counters (minted, burned, in tanks, released, refunded).</td></tr>
+          <tr><td><code>get_grades</code>, <code>get_grade</code>, <code>get_keys</code></td><td>Grades and their registered model keys with expiry and evidence hash.</td></tr>
+          <tr><td><code>verify_receipt</code></td><td>Whether a receipt's signature verifies, and its key is registered and live.</td></tr>
+          <tr><td><code>get_tank</code>, <code>get_tanks_for</code>, <code>ack_text_for</code></td><td>Tanks, and the exact ack text a tank key must sign.</td></tr>
+          <tr><td><code>get_recent_settlements</code>, <code>get_settlement_count</code></td><td>Settled answers.</td></tr>
+          <tr><td><code>mt_balance_of</code>, <code>mt_batch_balance_of</code>, <code>mt_supply</code>, <code>mt_token</code></td><td>NEP-245 balances and supply.</td></tr>
+        </tbody>
+      </table>
+      <h3>Calls</h3>
+      <table class="dtab">
+        <thead><tr><th>Method</th><th>Who</th></tr></thead>
+        <tbody>
+          <tr><td>USDC <code>ft_transfer_call</code> with <code>{"series_id", "to"?}</code></td><td>Anyone: buys Barrels.</td></tr>
+          <tr><td><code>fill</code>, <code>top_up</code>, <code>request_unlock</code>, <code>accept</code></td><td>Tank owner.</td></tr>
+          <tr><td><code>withdraw</code></td><td>Tank owner; on an accepted job, the owner or the agent.</td></tr>
+          <tr><td><code>settle</code>, <code>claim</code></td><td>Submitted by the Pump; the payout always goes to the series operator.</td></tr>
+          <tr><td><code>refund</code>, <code>mt_transfer</code>, <code>mt_transfer_call</code></td><td>Barrel holders.</td></tr>
+          <tr><td><code>open_series</code></td><td>Anyone; the caller becomes the series operator.</td></tr>
+          <tr><td><code>set_series_endpoint</code></td><td>Series operator.</td></tr>
+          <tr><td><code>add_grade</code>, <code>add_key</code>, <code>revoke_key</code>, <code>set_caps</code>, <code>pause</code>, <code>unpause</code></td><td>Owner.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── Operate ─────────────────────────────────────────────────────── -->
+    <div class="band"><span class="cap">Operate</span></div>
+
+    <section class="ds" id="operate">
+      <header class="ds-head"><span class="n pixel">18</span><h2>Run a Pump</h2></header>
+      <p>The operator runs one Pump per series. It needs the operator account's key in <code>.barrel/mainnet/</code> and a NEAR AI Cloud API key as <code>NEARAI_API_KEY</code> in <code>.env</code>.</p>
+      <div class="code"><button class="icon-btn" type="button" aria-label="Copy"><svg><use href="../assets/img/icons.svg#copy"/></svg></button><pre># serve it behind TLS at a public https:// address
+PUMP_HOST=0.0.0.0 PUMP_PORT=8787 pnpm pump</pre></div>
+      <p>A browser reaches a Pump only over HTTPS, or on its own machine, so the series must point at a public HTTPS address before anyone else can ask. The operator (<span class="mono" data-d="operator">op-v1.promptbarrel.near</span>) moves it by calling <code>set_series_endpoint</code> on the contract, <code>Barrel.setSeriesEndpoint</code> in <code>packages/sdk</code>. The endpoint only says where to ask; the payment rules do not change with it.</p>
+      <table class="dtab">
+        <thead><tr><th>Variable</th><th>Default</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>BARREL_NETWORK</code></td><td><code>mainnet</code></td><td>Which deployment record to serve.</td></tr>
+          <tr><td><code>PUMP_HOST</code>, <code>PUMP_PORT</code></td><td><code>127.0.0.1</code>, <code>8787</code></td><td>Where to listen.</td></tr>
+          <tr><td><code>PUMP_SERIES</code></td><td>the last series</td><td>Which series to serve.</td></tr>
+          <tr><td><code>PUMP_OPERATOR</code></td><td>the recorded operator</td><td>Which account settles and gets paid.</td></tr>
+          <tr><td><code>PUMP_SETTLE_MS</code></td><td><code>0</code></td><td>0 settles each ack at once; otherwise acks are batched on this interval.</td></tr>
+        </tbody>
+      </table>
+      <p>Acknowledged answers not yet settled are kept in a journal under <code>.barrel/pump/</code> and flushed to the chain on <code>SIGINT</code> or <code>SIGTERM</code>. When the machine also holds the owner key, the Pump re-attests and re-registers the model key as it rotates.</p>
+    </section>
+
+    <section class="ds" id="deployments">
+      <header class="ds-head"><span class="n pixel">19</span><h2>Deployments</h2></header>
+      <h3 id="dep-title">Mainnet</h3>
+      <div class="live" id="live" aria-live="polite">
+        <div><span class="cap">Contract</span><span class="status" id="lv-contract"><i class="dot"></i>Reading…</span></div>
+        <div><span class="cap">Model key</span><span class="status" id="lv-key"><i class="dot"></i>Reading…</span></div>
+        <div><span class="cap">Series 1 Pump</span><span class="status" id="lv-pump"><i class="dot"></i>Reading…</span></div>
+        <div><span class="cap">Answers settled</span><span class="status" id="lv-count"><i class="dot"></i>Reading…</span></div>
+      </div>
+      <dl class="dl">
+        <div><dt>Contract</dt><dd class="mono"><a class="link" data-d-link="contract" href="https://nearblocks.io/address/barrel-v1.promptbarrel.near" target="_blank" rel="noopener"><span data-d="contract">barrel-v1.promptbarrel.near</span></a></dd></div>
+        <div><dt>Owner</dt><dd class="mono" data-d="owner">promptbarrel.near</dd></div>
+        <div><dt>Operator</dt><dd class="mono" data-d="operator">op-v1.promptbarrel.near</dd></div>
+        <div><dt>Stablecoin</dt><dd>Circle's USDC on NEAR, <span class="mono" data-d="usdc-short">17208628…33a1</span></dd></div>
+        <div><dt>Grade</dt><dd><code>glm-5.3-flash</code> → <span class="mono" data-d="model">z-ai/glm-5.3-flash</span>, prompt tokens weighted <span data-d="weight">16%</span></dd></div>
+        <div><dt>Series 1</dt><dd><span data-d="price">0.60</span> USDC per Barrel, open until <span data-d="window">Dec 31, 2026, 00:00 UTC</span></dd></div>
+        <div><dt>Series 1 Pump</dt><dd class="mono" data-d="endpoint">http://127.0.0.1:8787</dd></div>
+        <div><dt>Caps</dt><dd><span data-d="cap-escrow">50</span> USDC of escrow in total; <span data-d="cap-series">100</span> Barrels per series</dd></div>
+        <div><dt>Delays</dt><dd>Unlock <span data-d="unlock">10 minutes</span>; settle grace <span data-d="grace">1 hour</span></dd></div>
+        <div><dt>WASM SHA-256</dt><dd class="mono" title="cb64709a83f94dcd6d30aec38051eb771dba16bbd9668e77f09b78ecbb0a4aa6">cb64709a…4aa6</dd></div>
+      </dl>
+      <p>Recorded in <code>deployments/mainnet.json</code>, which the Pump, the CLI, the MCP server and these pages read. The values above are re-read from the contract when this page loads.</p>
+      <h3>Testnet, for development</h3>
+      <p><code>barrel-v2.barrel-131c6dfe.testnet</code> with a test stablecoin anyone can mint (<code>usdc-v1.barrel-131c6dfe.testnet</code>, no value), recorded in <code>deployments/testnet.json</code>. It runs the end-to-end tests. Set <code>BARREL_NETWORK=testnet</code> to point any tool at it, including <code>pnpm web</code>.</p>
+    </section>
+
+    <section class="ds" id="limits">
+      <header class="ds-head"><span class="n pixel">20</span><h2>Trust and limits</h2></header>
+      <p>What a receipt proves: a TEE holding a key registered for this model signed these exact request and answer bytes. What it does not:</p>
+      <div class="blocks-d">
+        <div><b>Which machine served it</b><p>The receipt does not identify the serving instance.</p></div>
+        <div><b>Who registered the key</b><p>Barrel's registrar checks attestations off chain. The evidence is published and <code>barrel audit</code> repeats the checks. Moving them on chain is stage 3.</p></div>
+        <div><b>GPU evidence</b><p>NVIDIA GPU evidence is not checked yet. Guarantees rest on Intel TDX and NVIDIA confidential-computing assumptions.</p></div>
+        <div><b>Prompt privacy</b><p>The operator's Pump sees prompts and answers in plaintext.</p></div>
+        <div><b>Availability</b><p>An operator can refuse to serve. The money stays safe, but its refund waits for the series to close. An operator can lose at most one unpaid answer per tank.</p></div>
+        <div><b>Real money, low caps</b><p>Mainnet escrow is capped at <span data-d="cap-escrow">50</span> USDC in total while the contract is new, and the owner key can upgrade the contract.</p></div>
+      </div>
+    </section>
+
+    <section class="ds" id="roadmap">
+      <header class="ds-head"><span class="n pixel">21</span><h2>Roadmap</h2></header>
+      <ol class="road">
+        <li class="on"><span class="n pixel">1</span><div><b>Proof</b><span class="status"><i class="dot ok"></i>Live on mainnet</span><p>The loop on this page: one operator, one model, paid on proof, job tanks, refunds.</p></div></li>
+        <li><span class="n pixel">2</span><div><b>Reach</b><span class="status"><i class="dot"></i>Started</span><p>Done: pay from another chain through NEAR Intents 1Click. Not yet: resale of Barrels inside <code>intents.near</code> (they are NEP-245 tokens), and x402 top-ups for agents with no NEAR account.</p></div></li>
+        <li><span class="n pixel">3</span><div><b>Trustless</b><span class="status"><i class="dot"></i>Planned</span><p>On-chain attestation so anyone can register a key; prompts encrypted to the model.</p></div></li>
+        <li><span class="n pixel">4</span><div><b>Market</b><span class="status"><i class="dot"></i>Planned</span><p>A second supplier, firm series with operator bonds, a settlement price index.</p></div></li>
+      </ol>
+    </section>
+
+  </article>
+
+  <div class="doc-side hatch" aria-hidden="true"></div>
+</div>
+</div>
+
+</main>
+
+<footer class="foot" id="foot">
+  <div class="frame foot-frame">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="brand" href="../"><img src="../assets/img/mark-invert.svg" alt="" width="24" height="24"><span>Barrel</span></a>
+        <p class="small">AI credits with proof of which model ran, or the money back.</p>
+      </div>
+      <nav class="foot-col" aria-label="Product"><span class="cap">Product</span><a href="../#how">How it works</a><a href="../#faq">FAQ</a><a href="./">Docs</a></nav>
+      <nav class="foot-col" aria-label="Proof"><span class="cap">Proof</span><a data-d-link="contract" href="https://nearblocks.io/address/barrel-v1.promptbarrel.near" target="_blank" rel="noopener">Contract on NearBlocks</a><a href="../app/#escrow">Live escrow</a><a href="../app/#verify">Verify a receipt</a></nav>
+      <nav class="foot-col" aria-label="Built on"><span class="cap">Built on</span><a href="https://near.org" target="_blank" rel="noopener">NEAR Protocol</a><a href="https://cloud.near.ai" target="_blank" rel="noopener">NEAR AI Cloud</a><a href="https://github.com/nearai/nearai-cloud-verifier" target="_blank" rel="noopener">NEAR AI verifier</a></nav>
+    </div>
+    <div class="foot-bar small"><span>Built for the NEAR hackathon. MIT licence.</span><span id="foot-net">NEAR mainnet. Circle USDC, under low escrow caps.</span></div>
+    <div class="wordmark" id="wordmark" aria-hidden="true"><span>Barrel</span><span class="lit">Barrel</span></div>
+  </div>
+</footer>
+
+<script type="module" src="../assets/js/docs.js"></script>
+</body>
+</html>

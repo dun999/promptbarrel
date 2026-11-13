@@ -1,0 +1,174 @@
+/* Docs. The same drawing sheet as the site: rails the full height, sections
+   ruled across the window with ticks at the rails, content in cells. The
+   contents sit in a cell of their own, the text in a reading column, and the
+   spare width is hatched. Inside the text, things are grouped with filled
+   blocks and zebra rows, not more rules. Code is set on ink. */
+
+.docs main { padding-top: var(--nav-h); }
+.nav-links a[aria-current="page"] { background: var(--ink); color: var(--bg); }
+
+/* ── Title ─────────────────────────────────────────────────────────────────── */
+.dtop-in { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+.dtop-l { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-5); padding: clamp(40px, 5.5vw, 80px) var(--pad); border-right: 1px solid var(--line); min-width: 0; }
+.dtop-l .display .l { display: block; }
+.dtop-l .lead { max-width: 600px; }
+.dtop-r { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; gap: var(--s-2); padding: var(--pad); background-image: var(--hatch); }
+.fact { display: flex; flex-direction: column; justify-content: space-between; gap: var(--s-3); min-width: 0; min-height: 96px; padding: var(--s-4); background: var(--surface); border: 1px solid var(--line); }
+.fact dd { min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-14); line-height: var(--lh-14); color: var(--ink); }
+.fact dd b { font-size: 26px; line-height: 1; letter-spacing: -0.03em; }
+
+/* ── Sheet: contents | text | hatched margin ───────────────────────────────── */
+.dframe { display: grid; grid-template-columns: 248px minmax(0, 800px) minmax(0, 1fr); }
+.toc-cell { border-right: 1px solid var(--line); min-width: 0; }
+.toc { position: sticky; top: var(--nav-h); max-height: calc(100vh - var(--nav-h)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: var(--s-5) var(--s-4); }
+.toc summary { display: none; }
+.toc nav { display: flex; flex-direction: column; gap: 2px; }
+.toc nav .cap { padding: var(--s-4) var(--s-3) 6px; color: var(--faint); }
+.toc nav .cap:first-child { padding-top: 0; }
+.toc nav a { padding: 5px var(--s-3); font-size: var(--fs-14); line-height: var(--lh-14); color: var(--ink-2); transition: background var(--d-1), color var(--d-1); }
+.toc nav a:hover { background: var(--bg-2); color: var(--ink); }
+.toc nav a.on { background: var(--surface); color: var(--ink); font-weight: 500; box-shadow: inset 0 0 0 1px var(--line), inset 2px 0 0 var(--accent); }
+.doc { min-width: 0; padding: 0 var(--pad) var(--section-y); }
+.doc-side { border-left: 1px solid var(--line); }
+
+/* ── Text ──────────────────────────────────────────────────────────────────── */
+/* a group of sections opens with a hatched strip ruled across the column */
+.band { display: flex; align-items: center; height: 44px; margin: 0 calc(-1 * var(--pad)); padding: 0 var(--pad); border-block: 1px solid var(--line); background-image: var(--hatch); }
+.band:first-child { border-top: 0; }
+.band .cap { padding: 2px 6px; background: var(--bg); color: var(--ink-2); }
+.ds + .band { margin-top: var(--s-10); }
+.ds { padding-top: var(--s-9); scroll-margin-top: calc(var(--nav-h) + 8px); }
+.band + .ds { padding-top: var(--s-8); }
+.ds > * + * { margin-top: var(--s-4); }
+.ds-head { display: flex; align-items: baseline; gap: var(--s-3); }
+.ds-head .n { font-size: var(--fs-20); line-height: 1; color: var(--faint); }
+.ds-head h2 { font-size: var(--fs-24); line-height: var(--lh-24); font-weight: 500; letter-spacing: -0.025em; }
+.ds > .ds-head + * { margin-top: var(--s-5); }
+.ds h3 { margin-top: var(--s-7); font-size: var(--fs-16); line-height: var(--lh-16); font-weight: 600; letter-spacing: -0.01em; }
+.ds h3 + * { margin-top: var(--s-2); }
+.ds p, .ds li { font-size: var(--fs-16); line-height: 26px; color: var(--ink-2); text-wrap: pretty; }
+.ds > p { max-width: 68ch; }
+.doc code { white-space: normal; overflow-wrap: anywhere; }
+.doc b { font-weight: 600; color: var(--ink); }
+
+/* lists: square ticks, and numbers in small wells */
+.ticks { display: flex; flex-direction: column; gap: var(--s-2); max-width: 70ch; }
+.ticks li { position: relative; padding-left: 20px; }
+.ticks li::before { content: ""; position: absolute; left: 2px; top: 10px; width: 6px; height: 6px; background: var(--faint); }
+.nums { display: flex; flex-direction: column; gap: var(--s-2); max-width: 70ch; counter-reset: n; }
+.nums li { position: relative; padding-left: 36px; counter-increment: n; }
+.nums li::before { content: counter(n); position: absolute; left: 0; top: 2px; display: grid; place-items: center; width: 22px; height: 22px; background: var(--bg-2); font-family: var(--font-mono); font-size: var(--fs-12); line-height: 1; color: var(--ink); }
+.checks-l { display: flex; flex-direction: column; gap: var(--s-2); }
+.checks-l li { position: relative; padding-left: 26px; }
+.checks-l .icon { position: absolute; left: 0; top: 6px; width: 14px; height: 14px; color: var(--ok); }
+
+/* the rule, on ink like Barrel's side of the comparison */
+.rule-b { display: flex; flex-direction: column; gap: var(--s-1); padding: var(--s-5); background: var(--ink); border-left: 2px solid var(--accent-hi); }
+.rule-b b { font-size: var(--fs-18); line-height: var(--lh-18); font-weight: 500; color: var(--surface); }
+.rule-b span { font-size: var(--fs-15); line-height: var(--lh-15); color: rgba(255, 255, 255, 0.66); }
+
+/* the loop, five cells */
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
+.flow li { display: flex; flex-direction: column; gap: 4px; padding: var(--s-4); background: var(--bg-2); min-width: 0; }
+.flow .n { font-size: 22px; line-height: 1; margin-bottom: 6px; color: var(--faint); }
+.flow b { font-size: var(--fs-15); line-height: var(--lh-15); font-weight: 500; }
+.ds .flow p { font-size: var(--fs-13); line-height: 18px; color: var(--muted); }
+
+/* quick start and roadmap: numbered rows */
+.qs, .road { display: flex; flex-direction: column; gap: 2px; }
+.qs li, .road li { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: var(--s-4); padding: var(--s-4) var(--s-5); background: var(--bg-2); }
+.qs .n, .road .n { font-size: 22px; line-height: 26px; color: var(--faint); }
+.qs b, .road b { font-size: var(--fs-15); line-height: var(--lh-15); font-weight: 500; }
+.ds .qs p, .ds .road p { margin-top: 2px; font-size: var(--fs-15); line-height: var(--lh-15); }
+.road li > div { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--s-4); }
+.road li > div p { flex-basis: 100%; }
+.road li.on { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line), inset 2px 0 0 var(--accent); }
+.road li.on .n { color: var(--accent); }
+
+/* filled notes */
+.note-b, .state { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-4) var(--s-5); background: var(--bg-2); }
+.ds .note-b p, .ds .state p { font-size: var(--fs-15); line-height: var(--lh-15); }
+.state { border-left: 2px solid var(--ink); }
+.state .status { font-weight: 500; color: var(--ink); }
+.formula { padding: var(--s-4) var(--s-5); background: var(--surface); border: 1px solid var(--line-2); font-size: var(--fs-15); line-height: var(--lh-15); color: var(--ink); overflow-wrap: anywhere; }
+
+/* definition rows: zebra, no rules */
+.dl { display: flex; flex-direction: column; gap: 2px; }
+.dl > div { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: var(--s-4); padding: 10px var(--s-4); }
+.dl > div:nth-child(odd) { background: var(--bg-2); }
+.dl dt { font-size: var(--fs-14); line-height: var(--lh-15); font-weight: 500; color: var(--ink); }
+.dl dd { min-width: 0; font-size: var(--fs-15); line-height: var(--lh-15); color: var(--ink-2); overflow-wrap: anywhere; }
+.dl dd.mono { font-size: var(--fs-14); }
+
+/* tables: a mono header, zebra rows */
+.dtab { width: 100%; border-collapse: collapse; font-size: var(--fs-14); line-height: var(--lh-14); }
+.dtab th { padding: 0 var(--s-4) var(--s-2); text-align: left; font-family: var(--font-mono); font-size: var(--fs-11); line-height: var(--lh-11); font-weight: 400; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.dtab td { padding: 10px var(--s-4); vertical-align: top; color: var(--ink-2); }
+.dtab tbody tr:nth-child(odd) td { background: var(--bg-2); }
+.dtab td:first-child { color: var(--ink); }
+.dtab code { font-size: 0.86em; }
+
+/* code on ink */
+.code { position: relative; background: var(--ink); color: #f3f3f1; border-radius: var(--r-1); }
+.code pre { margin: 0; padding: var(--s-4) 52px var(--s-4) var(--s-5); overflow-x: auto; font-family: var(--font-mono); font-size: var(--fs-13); line-height: 21px; white-space: pre; }
+.code .icon-btn { position: absolute; top: 8px; right: 8px; color: #a3a3a0; background: var(--ink); }
+.code .icon-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.code .icon-btn.copied { color: #5fd38d; }
+
+/* signed texts */
+.sigs { display: flex; flex-direction: column; gap: 2px; }
+.sigs > div { display: flex; flex-direction: column; gap: 6px; padding: var(--s-4) var(--s-5); background: var(--bg-2); }
+.ds .sigs p { font-family: var(--font-mono); font-size: var(--fs-14); line-height: var(--lh-14); color: var(--ink); overflow-wrap: anywhere; }
+
+/* the deployment, read live */
+.live { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
+.live > div { display: flex; flex-direction: column; gap: var(--s-2); min-width: 0; padding: var(--s-3) var(--s-4); background: var(--surface); border: 1px solid var(--line); }
+.live .status { white-space: normal; align-items: flex-start; }
+.live .status .dot { margin-top: 6px; }
+
+/* what a receipt does not prove */
+.blocks-d { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); }
+.blocks-d > div { display: flex; flex-direction: column; gap: 6px; padding: var(--s-4); background: var(--bg-2); }
+.blocks-d b { font-size: var(--fs-15); line-height: var(--lh-15); font-weight: 500; }
+.ds .blocks-d p { font-size: var(--fs-14); line-height: var(--lh-14); color: var(--muted); }
+
+/* the footer here has no call to action above it */
+.docs .foot { border-top: 1px solid var(--line); }
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .dframe { grid-template-columns: 232px minmax(0, 1fr); }
+  .doc-side { display: none; }
+  .live { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 960px) {
+  .dtop-in { grid-template-columns: minmax(0, 1fr); }
+  .dtop-l { border-right: 0; border-bottom: 1px solid var(--line); }
+  .dframe { grid-template-columns: minmax(0, 1fr); }
+  .toc-cell { border-right: 0; border-bottom: 1px solid var(--line); }
+  .toc { position: static; max-height: none; padding: 0; }
+  .toc summary { display: flex; align-items: center; justify-content: space-between; padding: var(--s-4) var(--pad); font-size: var(--fs-15); font-weight: 500; cursor: pointer; list-style: none; }
+  .toc summary::-webkit-details-marker { display: none; }
+  .toc .chev { width: 18px; height: 18px; color: var(--muted); transition: transform var(--d-2) var(--ease); }
+  .toc[open] .chev { transform: rotate(180deg); }
+  .toc nav { padding: 0 var(--pad) var(--s-5); }
+  .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .fact { min-height: 0; }
+  .fact:nth-child(-n + 2) { grid-column: 1 / -1; }
+  .fact dd b { font-size: 22px; }
+  .flow, .blocks-d, .live { grid-template-columns: minmax(0, 1fr); }
+  .qs li, .road li { grid-template-columns: 32px minmax(0, 1fr); gap: var(--s-3); padding: var(--s-4); }
+  .dl > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .ds-head h2 { font-size: var(--fs-20); line-height: var(--lh-20); }
+  .ds p, .ds li { font-size: var(--fs-15); line-height: var(--lh-15); }
+  /* tables become stacked rows */
+  .dtab thead { display: none; }
+  .dtab, .dtab tbody, .dtab tr, .dtab td { display: block; width: 100%; }
+  .dtab tr { padding: var(--s-2) 0; }
+  .dtab tbody tr:nth-child(odd) { background: var(--bg-2); }
+  .dtab tbody tr:nth-child(odd) td { background: none; }
+  .dtab td { padding: 2px var(--s-4); }
+  .dtab td:first-child { font-weight: 500; }
+}

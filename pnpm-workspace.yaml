@@ -1,0 +1,13 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+  - "tests/*"
+  - "tools/*"
+
+# No dependency is allowed to run install scripts. Everything here works
+# with the prebuilt/pure-JS paths of these packages.
+allowBuilds:
+  esbuild: false
+  secp256k1: false
+  bufferutil: false
+  utf-8-validate: false

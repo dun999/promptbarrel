@@ -1,0 +1,38 @@
+{
+  "network": "mainnet",
+  "rpc": "https://free.rpc.fastnear.com",
+  "contract": "barrel-v1.promptbarrel.near",
+  "usdc": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+  "owner": "promptbarrel.near",
+  "operator": "op-v1.promptbarrel.near",
+  "wasm_sha256": "cb64709a83f94dcd6d30aec38051eb771dba16bbd9668e77f09b78ecbb0a4aa6",
+  "deployed_at": "2026-11-13T13:07:42.165Z",
+  "config": {
+    "unlock_delay_sec": 600,
+    "settle_grace_sec": 3600
+  },
+  "caps": {
+    "max_total_escrow": "50000000",
+    "max_series_units": "100000000"
+  },
+  "grades": [
+    {
+      "id": "glm-5.3-flash",
+      "model_id": "z-ai/glm-5.3-flash",
+      "input_weight_bps": 1600,
+      "key_ttl_sec": 86400,
+      "evidence": "deployments/evidence/0d62ea7eb1d95111fea32c62709ca6137d0c6db55fc46eb196f6a049d6865234.json"
+    }
+  ],
+  "series": [
+    {
+      "id": 1,
+      "grade_id": "glm-5.3-flash",
+      "model_id": "z-ai/glm-5.3-flash",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "600000",
+      "window_end": 1798675200
+    }
+  ],
+  "sample_receipts": []
+}

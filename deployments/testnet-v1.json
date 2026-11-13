@@ -1,0 +1,53 @@
+{
+  "network": "testnet",
+  "rpc": "https://test.rpc.fastnear.com",
+  "contract": "barrel-v1.barrel-131c6dfe.testnet",
+  "usdc": "usdc-v1.barrel-131c6dfe.testnet",
+  "owner": "barrel-131c6dfe.testnet",
+  "operator": "op-v1.barrel-131c6dfe.testnet",
+  "wasm_sha256": "ce349dff10f84705f7859982d316125b4c0abf810e916df49cb166df95d1b303",
+  "test_usdc_wasm_sha256": "cdecf659614c17133d77ad06f997d259ebe45ab2a80ea2e26adaa2579394937b",
+  "deployed_at": "2026-11-13T02:21:04.134Z",
+  "config": {
+    "unlock_delay_sec": 600,
+    "settle_grace_sec": 3600
+  },
+  "grades": [
+    {
+      "id": "glm-5.3-flash",
+      "model_id": "z-ai/glm-5.3-flash",
+      "input_weight_bps": 1600,
+      "key_ttl_sec": 86400,
+      "evidence": "deployments/evidence/aaa68a01e256b46e663246420de5f1786d03d3b20b83c792ec9e643adcfb8f75.json"
+    }
+  ],
+  "series": [
+    {
+      "id": 1,
+      "grade_id": "glm-5.3-flash",
+      "model_id": "z-ai/glm-5.3-flash",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "600000",
+      "window_end": 1798675200
+    }
+  ],
+  "sample_receipts": [
+    {
+      "file": "deployments/receipts/barrel-v1-tank1-seq2.json",
+      "settle_tx": "7v4DnX4cCaZ4KfEfuVVHubCy372VLtBLdQBW3AU8GE3r",
+      "units": "58",
+      "note": "short answer, reasoning_effort low"
+    },
+    {
+      "file": "deployments/receipts/barrel-v1-tank1-seq1.json",
+      "settle_tx": "4SDcW9MoNKeupyqnHurLXoSGUhuYrwEfcaqUFxC2yKE1",
+      "units": "242"
+    },
+    {
+      "file": "deployments/receipts/barrel-v1-tank1-seq0.json",
+      "settle_tx": "c1JhW93sXEgZBKEyCjsqduToCFfMYHrKeBTH7CSxS7x",
+      "units": "404",
+      "note": "all 400 completion tokens went to reasoning, so the visible answer is empty; still billed, because the model generated them"
+    }
+  ]
+}
