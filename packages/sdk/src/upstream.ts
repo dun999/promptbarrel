@@ -12,6 +12,12 @@ export interface UpstreamResponse {
 }
 
 /**
+ * The headers of an end-to-end encrypted request. The Pump passes them on
+ * untouched: they name the keys, and the keys never leave the two ends.
+ */
+export const E2EE_HEADERS = ["x-signing-algo", "x-client-pub-key", "x-model-pub-key", "x-encryption-version", "x-encrypt-all-fields"] as const;
+
+/**
  * Forwards a chat completion. The body is sent byte for byte, with the
  * canonical model ID and `x-no-aliasing: true`, so the model TEE (not the
  * gateway) signs the answer.
@@ -20,6 +26,7 @@ export async function postCompletion(
   apiKey: string,
   body: Uint8Array,
   baseUrl: string = NEAR_AI_BASE_URL,
+  extraHeaders: Record<string, string> = {},
 ): Promise<UpstreamResponse> {
   const res = await fetch(new URL("/v1/chat/completions", baseUrl), {
     method: "POST",
@@ -29,6 +36,7 @@ export async function postCompletion(
       accept: "application/json",
       "accept-encoding": "identity",
       "x-no-aliasing": "true",
+      ...extraHeaders,
     },
     body: body as unknown as BodyInit,
   });

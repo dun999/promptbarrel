@@ -1,0 +1,20 @@
+[package]
+name = "attestor"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Barrel attestor: verifies a model TEE's Intel TDX attestation on-chain and registers its signing key."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5.30.1"
+hex = "0.4"
+attest-core = { path = "../attest-core" }
+
+# The quote library links getrandom. Verification is deterministic and never
+# asks for randomness; on-chain the source is wired to fail if it ever did.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["custom"] }

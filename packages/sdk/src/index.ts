@@ -1,5 +1,6 @@
 export * from "./chain.ts";
 export * from "./barrel.ts";
+export * from "./attestor.ts";
 export * from "./env.ts";
 export * from "./upstream.ts";
 export * from "./registrar.ts";
@@ -7,4 +8,6 @@ export * from "./client.ts";
 export * from "./deploy.ts";
 export * from "./network.ts";
 export * from "./oneclick.ts";
+export * from "./intents.ts";
+export * from "./models.ts";
 export * from "./evm.ts";

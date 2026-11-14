@@ -11,6 +11,8 @@
     "e2e": "pnpm --filter @barrel/e2e test",
     "test": "pnpm --filter @barrel/verifier test && pnpm test:rust",
     "spike:s1": "tsx scripts/spike-s1.ts",
+    "spike:s2": "tsx scripts/spike-s2.ts",
+    "spike:s4": "tsx scripts/spike-s4.ts",
     "barrel": "tsx packages/sdk/src/cli.ts",
     "pump": "tsx apps/pump/src/main.ts",
     "deploy:testnet": "tsx scripts/deploy.ts --network testnet",

@@ -7,6 +7,17 @@
 //!   settle  For each request: the tank key's ack and the model TEE's
 //!           signature are both verified here. Units burn, USDC is released.
 //!   refund  After the series expires, unused Barrels burn for their USDC.
+//!
+//! Around the loop:
+//!   claim   An operator who served an answer the payer never acknowledged
+//!           claims it with the payer's request authorization and the model's
+//!           signature. The payer's own ack supersedes it inside a window.
+//!   firm    A series with an operator bond: a holder can force a request
+//!           through the chain, anyone can send a canary, and an operator
+//!           that stops answering is slashed and defaulted.
+//!   index   Every payout feeds a 24-hour price per grade built only from
+//!           proven deliveries.
+//!   gov     Owner changes and code upgrades wait out a timelock.
 
 use near_sdk::json_types::U128;
 use near_sdk::store::{IterableMap, LookupMap, Vector};
@@ -15,15 +26,21 @@ use near_sdk::{
 };
 
 mod events;
+mod firm;
+mod gov;
+mod index;
 mod registry;
 mod series;
 mod tank;
 mod token;
 pub mod util;
 
+pub use firm::{Canary, Firm, Forced};
+pub use gov::Pending;
+pub use index::{Bucket, IndexView};
 pub use registry::{Grade, KeyInfo, ReceiptCheck};
 pub use series::Series;
-pub use tank::{SettleItem, SettleRecord, Tank};
+pub use tank::{Claim, SettleItem, SettleRecord, Tank};
 
 pub(crate) const GAS_FT_TRANSFER: Gas = Gas::from_tgas(15);
 pub(crate) const GAS_CALLBACK: Gas = Gas::from_tgas(10);
@@ -42,24 +59,44 @@ pub(crate) enum StorageKey {
     Tanks,
     TanksByOwner,
     Recent,
+    TankByKey,
+    Index,
+    Forced,
+    Pending,
+    Owed,
 }
 
 #[near(serializers = [json, borsh])]
 #[derive(Clone)]
 pub struct Config {
-    /// Registers grades and keys, sets caps, unpauses.
+    /// Adds grades, sets caps, unpauses. Changes to it wait out the timelock.
     pub owner: AccountId,
     /// The one stablecoin this deployment accepts.
     pub usdc: AccountId,
     /// How long a tank owner waits between asking for their Barrels back and
-    /// getting them. Must exceed the operator's settle interval.
+    /// getting them. Must exceed the operator's settle interval and the
+    /// claim window.
     pub unlock_delay_sec: u64,
     /// After a series ends, operators have this long to settle what they
     /// already served. Refunds open when it has passed.
     pub settle_grace_sec: u64,
+    /// How long a payer has to answer an operator's claim with their own ack.
+    pub claim_window_sec: u64,
+    /// How long an owner change, an attestor change or an upgrade waits.
+    pub timelock_sec: u64,
     pub max_series_units: U128,
     pub max_total_escrow: U128,
+    /// Smallest purchase that may open a tank directly (keeps dust tanks out).
+    pub min_tank_buy_units: U128,
     pub paused: bool,
+    /// The contract that verifies TEE attestations on-chain and registers
+    /// model keys. Anyone can call it; it needs no permission from the owner.
+    pub attestor: Option<AccountId>,
+    /// May pause, and nothing else.
+    pub guardian: Option<AccountId>,
+    /// While true the owner can also register keys after off-chain checks.
+    /// Once turned off it cannot be turned on again.
+    pub owner_registers_keys: bool,
 }
 
 #[near(contract_state)]
@@ -78,28 +115,59 @@ pub struct Contract {
     pub(crate) next_tank_id: u64,
     /// USDC currently held for all series.
     pub(crate) total_escrow: u128,
+    /// Latest tank opened for a spend key, so a repeat purchase tops it up.
+    pub(crate) tank_by_key: LookupMap<String, u64>,
+    /// Rolling 24-hour delivery price per grade.
+    pub(crate) index: LookupMap<String, Vec<Bucket>>,
+    pub(crate) forced: LookupMap<u64, Forced>,
+    pub(crate) next_forced_id: u64,
+    /// USDC currently held as operator bonds.
+    pub(crate) total_bond: u128,
+    /// Changes waiting out the timelock, by kind.
+    pub(crate) pending: LookupMap<String, Pending>,
+    /// USDC a holder is owed after a transfer to them failed.
+    pub(crate) owed: LookupMap<AccountId, u128>,
+}
+
+#[near(serializers = [json])]
+pub struct InitArgs {
+    pub owner: AccountId,
+    pub usdc: AccountId,
+    pub unlock_delay_sec: u64,
+    pub settle_grace_sec: u64,
+    pub claim_window_sec: u64,
+    pub timelock_sec: u64,
+    pub max_series_units: U128,
+    pub max_total_escrow: U128,
+    pub min_tank_buy_units: U128,
+    pub attestor: Option<AccountId>,
+    pub guardian: Option<AccountId>,
+    pub owner_registers_keys: bool,
 }
 
 #[near]
 impl Contract {
     #[init]
-    pub fn new(
-        owner: AccountId,
-        usdc: AccountId,
-        unlock_delay_sec: u64,
-        settle_grace_sec: u64,
-        max_series_units: U128,
-        max_total_escrow: U128,
-    ) -> Self {
+    pub fn new(args: InitArgs) -> Self {
+        require!(
+            args.unlock_delay_sec > args.claim_window_sec,
+            "the unlock delay must exceed the claim window"
+        );
         Self {
             config: Config {
-                owner,
-                usdc,
-                unlock_delay_sec,
-                settle_grace_sec,
-                max_series_units,
-                max_total_escrow,
+                owner: args.owner,
+                usdc: args.usdc,
+                unlock_delay_sec: args.unlock_delay_sec,
+                settle_grace_sec: args.settle_grace_sec,
+                claim_window_sec: args.claim_window_sec,
+                timelock_sec: args.timelock_sec,
+                max_series_units: args.max_series_units,
+                max_total_escrow: args.max_total_escrow,
+                min_tank_buy_units: args.min_tank_buy_units,
                 paused: false,
+                attestor: args.attestor,
+                guardian: args.guardian,
+                owner_registers_keys: args.owner_registers_keys,
             },
             grades: IterableMap::new(StorageKey::Grades),
             keys: LookupMap::new(StorageKey::Keys),
@@ -112,6 +180,13 @@ impl Contract {
             next_series_id: 1,
             next_tank_id: 1,
             total_escrow: 0,
+            tank_by_key: LookupMap::new(StorageKey::TankByKey),
+            index: LookupMap::new(StorageKey::Index),
+            forced: LookupMap::new(StorageKey::Forced),
+            next_forced_id: 1,
+            total_bond: 0,
+            pending: LookupMap::new(StorageKey::Pending),
+            owed: LookupMap::new(StorageKey::Owed),
         }
     }
 
@@ -123,12 +198,20 @@ impl Contract {
         U128(self.total_escrow)
     }
 
+    pub fn get_total_bond(&self) -> U128 {
+        U128(self.total_bond)
+    }
+
     /// Stops new money and new settlements. Transfers, tank withdrawals and
     /// refunds stay open so nobody is locked in.
     pub fn pause(&mut self) {
-        self.assert_owner();
+        let caller = env::predecessor_account_id();
+        require!(
+            caller == self.config.owner || Some(&caller) == self.config.guardian.as_ref(),
+            "owner or guardian only"
+        );
         self.config.paused = true;
-        events::barrel("pause", near_sdk::serde_json::json!({}));
+        events::barrel("pause", near_sdk::serde_json::json!({ "by": caller }));
     }
 
     pub fn unpause(&mut self) {
@@ -141,6 +224,33 @@ impl Contract {
         self.assert_owner();
         self.config.max_series_units = max_series_units;
         self.config.max_total_escrow = max_total_escrow;
+    }
+
+    /// USDC owed to an account after a transfer to it failed (for example it
+    /// was not registered with the token).
+    pub fn get_owed(&self, account_id: AccountId) -> U128 {
+        U128(self.owed.get(&account_id).copied().unwrap_or(0))
+    }
+
+    /// Retries a payout that failed earlier.
+    pub fn claim_owed(&mut self) -> Promise {
+        let account = env::predecessor_account_id();
+        let amount = self.owed.remove(&account).unwrap_or(0);
+        require!(amount > 0, "nothing owed");
+        self.transfer_usdc(&account, amount).then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(GAS_CALLBACK)
+                .on_owed_paid(account, U128(amount)),
+        )
+    }
+
+    #[private]
+    pub fn on_owed_paid(&mut self, account: AccountId, amount: U128) -> U128 {
+        if near_sdk::is_promise_success() {
+            return amount;
+        }
+        self.owe(&account, amount.0);
+        U128(0)
     }
 }
 
@@ -182,13 +292,8 @@ impl Contract {
         }
     }
 
-    /// Sends USDC out of escrow. `total_escrow` is reduced up front and
-    /// restored by the caller's callback if the transfer fails.
-    pub(crate) fn send_usdc(&mut self, to: &AccountId, amount: u128) -> Promise {
-        self.total_escrow = self
-            .total_escrow
-            .checked_sub(amount)
-            .unwrap_or_else(|| env::panic_str("escrow underflow"));
+    /// A plain USDC transfer. The caller keeps the books.
+    pub(crate) fn transfer_usdc(&self, to: &AccountId, amount: u128) -> Promise {
         Promise::new(self.config.usdc.clone()).function_call(
             "ft_transfer".to_string(),
             near_sdk::serde_json::json!({ "receiver_id": to, "amount": U128(amount) })
@@ -197,5 +302,20 @@ impl Contract {
             NearToken::from_yoctonear(1),
             GAS_FT_TRANSFER,
         )
+    }
+
+    /// Sends USDC out of escrow. `total_escrow` is reduced up front and
+    /// restored by the caller's callback if the transfer fails.
+    pub(crate) fn send_usdc(&mut self, to: &AccountId, amount: u128) -> Promise {
+        self.total_escrow = self
+            .total_escrow
+            .checked_sub(amount)
+            .unwrap_or_else(|| env::panic_str("escrow underflow"));
+        self.transfer_usdc(to, amount)
+    }
+
+    pub(crate) fn owe(&mut self, account: &AccountId, amount: u128) {
+        let now = self.owed.get(account).copied().unwrap_or(0);
+        self.owed.insert(account.clone(), now + amount);
     }
 }

@@ -183,6 +183,7 @@
               <span class="label">Question</span>
               <textarea id="ask-q" rows="5" placeholder="In one sentence: what does a TEE attestation prove?"></textarea>
             </label>
+            <label class="check-field"><input type="checkbox" id="ask-private"><span><b>Private</b><span class="label">Encrypt the question to the model's attested key. The operator's Pump relays ciphertext it cannot read.</span></span></label>
             <button class="btn btn-primary btn-lg" id="ask-btn" type="submit">Ask</button>
             <p class="note">Your browser signs the request with the tank key, checks the model's signature on the answer, and only then signs the ack that lets the operator be paid.</p>
           </form>
@@ -243,7 +244,7 @@
               <div><dt>Evidence hash</dt><dd class="mono" id="key-ev">–</dd></div>
             </dl>
             <div class="attest">
-              <span class="label">Checked before registration</span>
+              <span class="label" id="attest-label">Checked before registration</span>
               <ul>
                 <li><svg class="icon"><use href="../assets/img/icons.svg#check"/></svg>Intel DCAP quote verification</li>
                 <li><svg class="icon"><use href="../assets/img/icons.svg#check"/></svg>Report data binds the key and a fresh nonce</li>
@@ -326,13 +327,13 @@
         </section>
 
         <section class="panel s7">
-          <header class="panel-head"><h2 class="panel-title">What a receipt does not prove</h2><span class="label">v1</span></header>
+          <header class="panel-head"><h2 class="panel-title">What a receipt does not prove</h2></header>
           <div class="panel-body">
             <div class="blocks two limits">
               <div class="block"><h3 class="h4">Which machine served it</h3><p class="label">A TEE holding the model's key signed these bytes. The receipt does not identify the serving instance.</p></div>
-              <div class="block"><h3 class="h4">Who registered the key</h3><p class="label">Barrel's registrar checks attestations off‑chain. <code>barrel audit</code> repeats the checks.</p></div>
+              <div class="block" id="limit-key"><h3 class="h4">Who registered the key</h3><p class="label">Barrel's registrar checks attestations off‑chain. <code>barrel audit</code> repeats the checks.</p></div>
               <div class="block"><h3 class="h4">GPU evidence</h3><p class="label">NVIDIA GPU evidence is not checked yet. Guarantees rest on Intel TDX.</p></div>
-              <div class="block"><h3 class="h4">Prompt privacy</h3><p class="label">The operator's Pump sees prompts and answers in plaintext.</p></div>
+              <div class="block"><h3 class="h4">Prompt privacy</h3><p class="label">Ask privately and the Pump only relays ciphertext. It still sees token counts, timing and which tank asked.</p></div>
               <div class="block"><h3 class="h4">Streaming</h3><p class="label">Streamed answers are signed by the gateway, so the Pump refuses to stream.</p></div>
               <div class="block" id="limit-money"><h3 class="h4">Real money, low caps</h3><p class="label">This is mainnet USDC. The contract caps how much it holds, and it is upgradeable by its owner key.</p></div>
             </div>
@@ -341,7 +342,7 @@
       </div>
     </section>
 
-    <footer class="app-foot label"><span>Every number here is read from the chain by your browser. Every action is a transaction your wallet signs.</span><span>Barrel v1 · MIT</span></footer>
+    <footer class="app-foot label"><span>Every number here is read from the chain by your browser. Every action is a transaction your wallet signs.</span><span>Barrel · MIT</span></footer>
   </main>
 </div>
 

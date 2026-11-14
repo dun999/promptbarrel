@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Barrel, Chain, NETWORKS, REPO_ROOT, loadWallet, type Wallet } from "@barrel/sdk";
+import { Barrel, CHEAPEST_MODEL, Chain, NETWORKS, REPO_ROOT, loadWallet, type Wallet } from "@barrel/sdk";
 import { newKeyPair } from "@barrel/verifier";
 import * as txs from "../../../apps/web/src/txs.ts";
 import { ask } from "../../../apps/web/src/tank.ts";
@@ -20,14 +20,15 @@ import { ask } from "../../../apps/web/src/tank.ts";
 const deployment = JSON.parse(readFileSync(join(REPO_ROOT, "deployments", "testnet.json"), "utf8")) as {
   contract: string;
   usdc: string;
-  series: { id: number }[];
+  series: { id: number; model_id: string }[];
 };
 const chain = new Chain(NETWORKS.testnet);
 const barrel = new Barrel(chain, deployment.contract, deployment.usdc);
 const c = { barrel: deployment.contract, usdc: deployment.usdc };
 const run = (w: Wallet, s: txs.TxSpec) => chain.call(w, s.receiverId, s.methodName, s.args, { gasTgas: s.gasTgas, deposit: s.deposit });
 
-const seriesId = deployment.series.at(-1)!.id;
+// Tests run on the cheapest model.
+const seriesId = (deployment.series.find((s) => s.model_id === CHEAPEST_MODEL.model) ?? deployment.series.at(-1)!).id;
 // A funded testnet account to create users under, when the faucet is rate-limited.
 const funder = process.env.BARREL_E2E_ROOT ? loadWallet("testnet", process.env.BARREL_E2E_ROOT) : undefined;
 const newUser = (name: string, near = "0.4") =>
@@ -74,6 +75,25 @@ test("buy, fill, ask and unlock with the app's transactions and ask code", { ski
   const after = (await barrel.tank(tankId))!;
   assert.equal(after.next_seq, 1);
   assert.equal(BigInt(after.balance), held - answer.units);
+
+  // The same ask with "Private" ticked: the browser encrypts the question to
+  // the model's registered key and opens the answer itself.
+  const secret = await ask({
+    view: (contract, method, args) => chain.view(contract, method, args),
+    contractId: deployment.contract,
+    tank: after,
+    grade,
+    endpoint: series.endpoint,
+    secretKey: key.secretKey,
+    question: "Reply with the single word: sealed",
+    maxTokens: 300,
+    private: true,
+  });
+  assert.ok(secret.checks.every((x) => x.ok), JSON.stringify(secret.checks));
+  assert.ok(secret.sealedTo);
+  assert.ok(secret.checks.some((x) => x.name === "the answer came back encrypted to this tank's key" && x.ok));
+  assert.equal(JSON.stringify(secret.receipt).includes("sealed\""), false, "the signed bytes carry ciphertext only");
+  assert.ok(secret.settleTx);
 
   // The owner can always take the rest back: unlock starts the delay.
   await run(user, txs.requestUnlock(c, tankId));

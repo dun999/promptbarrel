@@ -22,6 +22,7 @@ const page = {
   network: d.network,
   rpc: d.rpc,
   contract: d.contract,
+  attestor: d.attestor,
   usdc: d.usdc,
   owner: d.owner,
   operator: d.operator,

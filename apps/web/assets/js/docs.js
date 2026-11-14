@@ -62,10 +62,20 @@ const fill = (k, v) => $$(`[data-d="${k}"]`).forEach((el) => { el.textContent = 
 const status = (id, cls, html) => { $(id).innerHTML = `<i class="dot ${cls}"></i><span>${html}</span>`; };
 const hours = (sec) => { const h = Math.round(sec / 3600); return `${h} hour${h === 1 ? "" : "s"}`; };
 const minutes = (sec) => { const m = Math.round(sec / 60); return `${m} minute${m === 1 ? "" : "s"}`; };
+const duration = (sec) => (sec >= 3600 ? hours(sec) : minutes(sec));
 const when = (sec) => {
   const d = new Date(sec * 1000);
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}, ${d.toISOString().slice(11, 16)} UTC`;
 };
+
+/** The models table: one row per series, from the chain or from the deployment record. */
+function modelRows(series, grades, unit) {
+  const rows = series.map((x) => {
+    const g = grades.find((y) => y.id === x.grade_id);
+    return `<tr><td>${x.id}</td><td class="mono">${escapeHtml(g?.model_id ?? x.model_id ?? x.grade_id)}</td><td>${usdc(x.price_per_barrel)} ${unit}</td><td>${g ? `${g.input_weight_bps / 100}%` : "–"}</td></tr>`;
+  });
+  $("#models-rows").innerHTML = rows.join("") || `<tr><td colspan="4">No series open</td></tr>`;
+}
 
 /** Where a series' Pump can be reached from a browser, and whether it answers. */
 async function pumpState(endpoint) {
@@ -94,10 +104,14 @@ async function pumpState(endpoint) {
   fill("net", `NEAR ${deployment.network}`);
   fill("network", deployment.network);
   fill("contract", deployment.contract);
+  if (deployment.wasm_sha256) fill("wasm", short(deployment.wasm_sha256, 8, 4));
   fill("unit", test ? "tUSDC" : "USDC");
   $$('[data-d-link="contract"]').forEach((a) => { a.href = `${EXPLORER}/address/${deployment.contract}`; });
+  const unit = test ? "tUSDC" : "USDC";
+  modelRows(deployment.series ?? [], deployment.grades ?? [], unit);
   if (test) {
     $("#dep-title").textContent = "Testnet (this build reads it)";
+    $("#dep-coin").textContent = "A test stablecoin with no value";
     $("#foot-net").textContent = "Testnet development build. Test USDC has no value.";
   }
 
@@ -110,9 +124,20 @@ async function pumpState(endpoint) {
     return;
   }
   const c = s.config;
+  // A contract from before claims and the timelock has no claim window in its config.
+  $("#d-version").hidden = c.claim_window_sec !== undefined;
   const series = s.series[0];
-  const grade = series ? s.grades.find((g) => g.id === series.grade_id) : s.grades[0];
+  const gradeOf = (x) => s.grades.find((g) => g.id === x.grade_id);
+  // The worked example uses the cheapest series on offer.
+  const cheapest = [...s.series].sort((a, b) => Number(a.price_per_barrel) - Number(b.price_per_barrel))[0];
+  const grade = cheapest ? gradeOf(cheapest) : s.grades[0];
   fill("escrow", usdc(s.escrow));
+  fill("models", int(new Set(s.series.map((x) => x.grade_id)).size));
+  if (c.attestor !== undefined) fill("attestor", c.attestor ?? "none: the owner registers keys");
+  if (c.claim_window_sec !== undefined) fill("claim", minutes(c.claim_window_sec));
+  if (c.timelock_sec !== undefined) fill("timelock", duration(c.timelock_sec));
+  if (c.min_tank_buy_units !== undefined) fill("min-buy", int(c.min_tank_buy_units));
+  modelRows(s.series, s.grades, unit);
   fill("owner", c.owner);
   fill("usdc-short", /^[0-9a-f]{64}$/.test(c.usdc) ? short(c.usdc, 8, 4) : c.usdc);
   fill("unlock", minutes(c.unlock_delay_sec));
@@ -124,19 +149,41 @@ async function pumpState(endpoint) {
     fill("weight", `${grade.input_weight_bps / 100}%`);
     fill("ttl", hours(grade.key_ttl_sec));
   }
+  if (cheapest) {
+    const price = BigInt(cheapest.price_per_barrel);
+    fill("price-from", usdc(price));
+    fill("price", usdc(price));
+    fill("per-usdc", (Number((1_000_000n * 1_000_000n) / price) / 1e6).toFixed(6));
+    if (grade) {
+      const prompt = Math.ceil((420 * grade.input_weight_bps) / 10_000);
+      const units = 180 + prompt;
+      fill("ex-prompt", int(prompt));
+      fill("ex-units", int(units));
+      fill("ex-cost", (Number((BigInt(units) * price) / 1_000_000n) / 1e6).toPrecision(2));
+    }
+  }
   if (series) {
     fill("operator", series.operator);
-    fill("price", usdc(series.price_per_barrel));
     fill("window", when(series.window_end));
     fill("endpoint", series.endpoint);
   }
 
   status("#lv-contract", c.paused ? "bad" : "ok", c.paused ? "Paused" : "Active");
-  const key = liveKey(s.keys);
-  const latest = key ?? [...s.keys].sort((a, b) => b.expires_at - a.expires_at)[0];
-  status("#lv-key", key ? "ok" : "bad", key
-    ? `Live, ${span(key.expires_at - Date.now() / 1000)} left`
-    : latest ? "Expired: nothing settles until a fresh key is registered" : "None registered");
+  // Every model on offer needs a live key, or its answers cannot settle.
+  const offered = [...new Set(s.series.map((x) => x.grade_id))];
+  const live = offered.filter((g) => liveKey(s.keysByGrade[g] ?? []));
+  if (offered.length === 0) status("#lv-key", "", "No series open");
+  else if (offered.length === 1) {
+    const keys = s.keysByGrade[offered[0]] ?? [];
+    const key = liveKey(keys);
+    status("#lv-key", key ? "ok" : "bad", key
+      ? `Live, ${span(key.expires_at - Date.now() / 1000)} left`
+      : keys.length ? "Expired: nothing settles until a fresh key is registered" : "None registered");
+  } else {
+    status("#lv-key", live.length === offered.length ? "ok" : "bad", live.length === offered.length
+      ? `Live for all ${offered.length} models`
+      : `Live for ${live.length} of ${offered.length} models; the rest cannot settle until a fresh key is registered`);
+  }
   status("#lv-count", s.count > 0 ? "ok" : "", s.count > 0 ? `${int(s.count)} paid on proof` : "None yet");
   if (series) {
     const [cls, html] = await pumpState(series.endpoint);

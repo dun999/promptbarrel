@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Runs the pure Rust rules shared by the contract (contracts/barrel-core).
+# Runs the pure Rust rules shared by the contract (contracts/barrel-core) and
+# the attestation checks of the attestor contract against real reports
+# (contracts/attest-core).
 # Same linker choice as build-contract.sh: some machines have a `cc` first on
 # PATH that cannot link host binaries, so prefer the system compiler.
 set -euo pipefail
@@ -9,3 +11,4 @@ if [ -z "${CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER:-}" ] && [ -x /usr/bin/g
   export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/gcc
 fi
 cargo test -p barrel-core
+cargo test -p attest-core --release

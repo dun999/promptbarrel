@@ -19,7 +19,9 @@ export interface Deployment {
   operator: string;
   wasm_sha256: string;
   deployed_at: string;
-  config: { unlock_delay_sec: number; settle_grace_sec: number };
+  /** The attestor contract that registers model keys by on-chain attestation, if deployed. */
+  attestor?: string;
+  config: { unlock_delay_sec: number; settle_grace_sec: number; claim_window_sec?: number; timelock_sec?: number; min_tank_buy_units?: string };
   grades: { id: string; model_id: string; input_weight_bps: number; key_ttl_sec: number; evidence?: string }[];
   series: { id: number; grade_id: string; model_id: string; endpoint: string; price_per_barrel: string; window_end: number }[];
   sample_receipts: { file: string; settle_tx?: string; units: string }[];

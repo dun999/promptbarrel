@@ -1,15 +1,21 @@
 {
   "network": "testnet",
   "rpc": "https://test.rpc.fastnear.com",
-  "contract": "barrel-v2.barrel-131c6dfe.testnet",
-  "usdc": "usdc-v1.barrel-131c6dfe.testnet",
+  "contract": "barrel-v3.barrel-131c6dfe.testnet",
+  "attestor": "attestor-v3.barrel-131c6dfe.testnet",
+  "usdc": "usdc-v3.barrel-131c6dfe.testnet",
   "owner": "barrel-131c6dfe.testnet",
-  "operator": "op-v2.barrel-131c6dfe.testnet",
-  "wasm_sha256": "cb64709a83f94dcd6d30aec38051eb771dba16bbd9668e77f09b78ecbb0a4aa6",
-  "deployed_at": "2026-11-13T12:22:57.352Z",
+  "operator": "op-v3.barrel-131c6dfe.testnet",
+  "wasm_sha256": "e00f107b125b378c859379f41c17dcdd213bdd871d3c8d505d9ae259af0acf6d",
+  "attestor_wasm_sha256": "70ddc85fa8645655c1a170e08b86b29dff4fcf409af7d4b8f0b0bbd72faddbaa",
+  "test_usdc_wasm_sha256": "673e8b44b0bcaafddfb4070d6a5021335857164e25f744280af0646efcc5b3aa",
+  "deployed_at": "2026-11-14T04:53:04.148Z",
   "config": {
     "unlock_delay_sec": 600,
-    "settle_grace_sec": 3600
+    "settle_grace_sec": 3600,
+    "claim_window_sec": 300,
+    "timelock_sec": 300,
+    "min_tank_buy_units": "10000"
   },
   "caps": {
     "max_total_escrow": "100000000000",
@@ -19,9 +25,60 @@
     {
       "id": "glm-5.3-flash",
       "model_id": "z-ai/glm-5.3-flash",
+      "label": "GLM 5.3 Flash",
       "input_weight_bps": 1600,
       "key_ttl_sec": 86400,
-      "evidence": "deployments/evidence/b918875d29795c9a32e437dbdcc60366d26030e5015bf4349b60464efddb78df.json"
+      "compose_hashes": [
+        "c900dc7304663b73b623cd5d941fbdab6f02858017b371ae28de445a16d2e2d0",
+        "e8416a02d6f7ce47baaa52e3925b934fd30834b04fc9086b363db9b1d12c729d",
+        "a7de0bba194b6466c5c7b8dcfb907b6b60404ab2ba6de8b5d0cf63c2145d6868"
+      ],
+      "evidence": "deployments/evidence/f0e4adbdb507f6bdf8d892d998173c969e74941f2b254ab78177d0e8d47ad8a4.json"
+    },
+    {
+      "id": "qwen3-vl-30b",
+      "model_id": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "label": "Qwen3 VL 30B",
+      "input_weight_bps": 2728,
+      "key_ttl_sec": 86400,
+      "compose_hashes": [
+        "e8416a02d6f7ce47baaa52e3925b934fd30834b04fc9086b363db9b1d12c729d"
+      ],
+      "evidence": "deployments/evidence/8fad8fefc1f8fa495b450582097f15dc7c2f179951ca215b2e239731dad998e3.json"
+    },
+    {
+      "id": "qwen3.6-35b",
+      "model_id": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "label": "Qwen3.6 35B",
+      "input_weight_bps": 1546,
+      "key_ttl_sec": 86400,
+      "compose_hashes": [
+        "e8416a02d6f7ce47baaa52e3925b934fd30834b04fc9086b363db9b1d12c729d"
+      ],
+      "evidence": "deployments/evidence/d7a604cf1ae6ef8a5423442f77c795cd6aa576b0a0b674cd6302c8f6d2f1dd52.json"
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "model_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "label": "DeepSeek V4.1 Flash",
+      "input_weight_bps": 2500,
+      "key_ttl_sec": 86400,
+      "compose_hashes": [
+        "c53e254e8b70aa14b45ba3043730a0736ca2afb1df7fa3db9c61578845e470fe",
+        "448683dd83e50727b9c5f6cdc84bd9d93fcf2c888001a85b1ba32f76b3612e3e"
+      ],
+      "evidence": "deployments/evidence/d314ebfe9ebbd29af0fe7d32fa69bf969f5e49015ce728fd456e476e5d88146c.json"
+    },
+    {
+      "id": "qwen3.8-27b",
+      "model_id": "Qwen/Qwen3.8-27B",
+      "label": "Qwen3.8 27B",
+      "input_weight_bps": 297,
+      "key_ttl_sec": 86400,
+      "compose_hashes": [
+        "e8416a02d6f7ce47baaa52e3925b934fd30834b04fc9086b363db9b1d12c729d"
+      ],
+      "evidence": "deployments/evidence/6d722254e302d7cfb2d5b6fe95bd1de844872696719c381ea6159a538a849a77.json"
     }
   ],
   "series": [
@@ -29,21 +86,59 @@
       "id": 1,
       "grade_id": "glm-5.3-flash",
       "model_id": "z-ai/glm-5.3-flash",
-      "endpoint": "http://127.0.0.1:8788",
+      "endpoint": "http://127.0.0.1:8787",
       "price_per_barrel": "600000",
-      "window_end": 1798675200
+      "window_end": 1798675200,
+      "firm_bond": "2000000"
+    },
+    {
+      "id": 2,
+      "grade_id": "qwen3-vl-30b",
+      "model_id": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "660000",
+      "window_end": 1798675200,
+      "firm_bond": "2000000"
+    },
+    {
+      "id": 3,
+      "grade_id": "qwen3.6-35b",
+      "model_id": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "1320000",
+      "window_end": 1798675200,
+      "firm_bond": "2000000"
+    },
+    {
+      "id": 4,
+      "grade_id": "deepseek-v4.1-flash",
+      "model_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "1440000",
+      "window_end": 1798675200,
+      "firm_bond": "2000000"
+    },
+    {
+      "id": 5,
+      "grade_id": "qwen3.8-27b",
+      "model_id": "Qwen/Qwen3.8-27B",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "1620000",
+      "window_end": 1798675200,
+      "firm_bond": "2000000"
     }
   ],
   "sample_receipts": [
     {
-      "file": "deployments/receipts/barrel-v2-tank1-seq0.json",
-      "settle_tx": "GEQ76uDLQdSTuMYcAZfnKCMRQV9heA1tgAcFjg3Ye2tu",
-      "units": "61"
+      "file": "deployments/receipts/barrel-v3-tank1-seq0.json",
+      "settle_tx": "EFDa8p3j9EiUeNLC8MbpUCySMEhCnpn7bY5oNBez5gsH",
+      "units": "69"
     },
     {
-      "file": "deployments/receipts/barrel-v2-tank1-seq1.json",
-      "settle_tx": "4JPxoy6YTLdprPVdmtqYVdm7VFQgTjmokrkVg9KiQdxC",
-      "units": "39"
+      "file": "deployments/receipts/barrel-v3-tank1-seq1.json",
+      "settle_tx": "FTLTZ4uqUmTefhyBxXUoREgFWkTUJqVTJxznwXnhJM8",
+      "units": "47",
+      "private": true
     }
   ]
 }

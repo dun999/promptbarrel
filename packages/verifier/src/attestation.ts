@@ -147,6 +147,8 @@ export interface CheckOptions {
    */
   collateral?: unknown;
   nowSecs?: number;
+  /** Collateral per candidate, for a report with several machines. Wins over `collateral`. */
+  collateralFor?: (candidate: AttestationCandidate) => unknown;
   /** Skip Intel DCAP verification entirely. The result then says so. */
   skipDcap?: boolean;
 }
@@ -219,7 +221,10 @@ export async function checkCandidate(
     try {
       const raw = hexToBytes(candidate.intel_quote);
       const now = options.nowSecs ?? Math.floor(Date.now() / 1000);
-      const collateral = (options.collateral ?? (await qvl.getCollateral(qvl.PHALA_PCCS_URL, raw))) as qvl.Collateral;
+      // One model can run on several machines, and each machine's quote needs
+      // its own collateral: a list gives one per candidate, in order.
+      const given = options.collateralFor?.(candidate) ?? options.collateral;
+      const collateral = (given ?? (await qvl.getCollateralFromPcs(raw))) as qvl.Collateral;
       const verified = qvl.verify(raw, collateral, now);
       tcbStatus = verified.status;
       advisoryIds = verified.advisory_ids;
@@ -289,6 +294,7 @@ export function collateralFromJson(json: string): unknown {
   });
 }
 
+/** Intel's collateral for a quote, from Intel's own Provisioning Certification Service. */
 export async function fetchCollateral(quoteHex: string): Promise<unknown> {
-  return qvl.getCollateral(qvl.PHALA_PCCS_URL, hexToBytes(quoteHex));
+  return qvl.getCollateralFromPcs(hexToBytes(quoteHex));
 }

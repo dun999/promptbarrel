@@ -87,10 +87,16 @@ export function formatAmount(value: bigint | string, decimals = 6): string {
   return frac ? `${v / base}.${frac}` : `${v / base}`;
 }
 
+/** What a tank key signs to hand a tank it owns to a NEAR account. */
+export function assignText(contractId: string, tankId: number | bigint, newOwner: string): string {
+  return `barrel:v1:assign:${contractId}:${tankId}:${newOwner}`;
+}
+
 /**
- * What a tank key signs to ask the Pump for one answer. It never reaches the
- * chain: it lets the Pump know the request comes from the tank's owner and
- * caps what that request may cost before any tokens are generated.
+ * What a tank key signs to ask the Pump for one answer. It lets the Pump
+ * know the request comes from the tank's owner and caps what that request
+ * may cost before any tokens are generated. It reaches the chain only when
+ * the operator claims an answer the payer did not acknowledge.
  */
 export function requestAuthText(
   contractId: string,

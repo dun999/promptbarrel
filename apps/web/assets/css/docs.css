@@ -12,6 +12,8 @@
 .dtop-l { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-5); padding: clamp(40px, 5.5vw, 80px) var(--pad); border-right: 1px solid var(--line); min-width: 0; }
 .dtop-l .display .l { display: block; }
 .dtop-l .lead { max-width: 600px; }
+.dtop-l .note-b { max-width: 600px; }
+.dtop-l .note-b p { font-size: var(--fs-15); line-height: var(--lh-15); color: var(--ink-2); }
 .dtop-r { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: center; gap: var(--s-2); padding: var(--pad); background-image: var(--hatch); }
 .fact { display: flex; flex-direction: column; justify-content: space-between; gap: var(--s-3); min-width: 0; min-height: 96px; padding: var(--s-4); background: var(--surface); border: 1px solid var(--line); }
 .fact dd { min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-14); line-height: var(--lh-14); color: var(--ink); }
@@ -107,6 +109,7 @@
 .dtab tbody tr:nth-child(odd) td { background: var(--bg-2); }
 .dtab td:first-child { color: var(--ink); }
 .dtab code { font-size: 0.86em; }
+.dtab td:first-child code { overflow-wrap: break-word; }
 
 /* code on ink */
 .code { position: relative; background: var(--ink); color: #f3f3f1; border-radius: var(--r-1); }

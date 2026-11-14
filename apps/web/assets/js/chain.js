@@ -67,8 +67,11 @@ export async function readState() {
     view("get_series_list", {}),
     view("get_config"),
   ]);
-  const keys = grades[0] ? await view("get_keys", { grade_id: grades[0].id }) : [];
-  return { escrow: BigInt(escrow), count: Number(count), recent, grades, series, config, keys, at: Date.now() };
+  // Every model has its own keys; the pages show the ones of the series in view.
+  const lists = await Promise.all(grades.map((g) => view("get_keys", { grade_id: g.id })));
+  const keysByGrade = Object.fromEntries(grades.map((g, i) => [g.id, lists[i]]));
+  const keys = grades[0] ? keysByGrade[grades[0].id] : [];
+  return { escrow: BigInt(escrow), count: Number(count), recent, grades, series, config, keys, keysByGrade, at: Date.now() };
 }
 
 /** Split one series' escrow into where the money is now. Parts always sum to escrow_in. */

@@ -300,7 +300,7 @@ function renderSeriesPick() {
       ? `Closed ${utc(s.window_end)}. Holders can refund.`
       : blocked
         ? `<span class="warn">Not reachable from this page: ${escapeHtml(blocked)}.</span>`
-        : `Operator ${escapeHtml(s.operator)} · closes ${new Date(s.window_end * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}`;
+        : `${s.firm ? `Firm, ${usdc(s.firm.bond)} ${unit()} bond · ` : ""}Closes ${new Date(s.window_end * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} · operator ${escapeHtml(s.operator)}`;
     return `<button type="button" class="series-opt" role="radio" aria-checked="${s.id === selected}" data-id="${s.id}" ${open ? "" : "disabled"}>
       <span class="radio"></span>
       <span><b>Series ${s.id} · ${escapeHtml(g?.model_id ?? s.grade_id)}</b><span class="label">${sub}</span></span>
@@ -313,6 +313,8 @@ $("#series-pick").addEventListener("click", (e) => {
   if (!b || b.disabled) return;
   selected = Number(b.dataset.id);
   renderUse();
+  // The escrow and key panels follow the series in view.
+  if (state) renderNetwork(state);
 });
 
 function renderBuyCalc() {
@@ -801,13 +803,14 @@ $("#ask-form").addEventListener("submit", async (e) => {
   btn.setAttribute("aria-busy", "true");
   out.innerHTML = `<div class="thinking"><span class="dot live"></span>Asking ${escapeHtml(g.model_id)} through ${escapeHtml(new URL(s.endpoint).host)}. Nothing is paid until its signature checks out.</div>`;
   try {
-    const r = await near.ask({ view: (c, m, a) => view(m, a, c), contractId: deployment.contract, tank: t, grade: g, endpoint: s.endpoint, secretKey: secret, question: q });
+    const priv = $("#ask-private").checked;
+    const r = await near.ask({ view: (c, m, a) => view(m, a, c), contractId: deployment.contract, tank: t, grade: g, endpoint: s.endpoint, secretKey: secret, question: q, private: priv });
     lastAsk = r;
     const cost = (r.units * BigInt(s.price_per_barrel)) / UNITS;
     out.innerHTML = `<div class="answer">${escapeHtml(r.content.trim() || "(no visible answer: the token limit went to reasoning)")}</div>
       <div class="answer-meta"><span>Paid ${int(r.units)} units (${usdc(cost, { min: 2 })} ${unit()}) for ${r.usage.prompt_tokens} prompt + ${r.usage.completion_tokens} completion tokens</span>${r.settleTx ? `<a href="${txLink(r.settleTx)}" target="_blank" rel="noopener">Settlement transaction</a>` : "<span>Settlement queued by the operator</span>"}<button class="link-btn" type="button" id="ask-verify">Check this receipt</button></div>
       ${checkList(r.checks)}
-      <div class="verdict ok">${ic("shield")}<div><b>Paid on proof</b><span>Your browser verified the model's signature before signing the ack.</span></div></div>`;
+      <div class="verdict ok">${ic("shield")}<div><b>Paid on proof</b><span>Your browser verified the model's signature before signing the ack.${r.sealedTo ? " The question and the answer crossed the Pump encrypted." : ""}</span></div></div>`;
     $("#ask-verify").addEventListener("click", () => { show(r.receipt, false, "Your answer"); verify(); go("verify"); });
     await refresh();
   } catch (err) {
@@ -821,7 +824,8 @@ $("#ask-form").addEventListener("submit", async (e) => {
 // ── network panels ───────────────────────────────────────────────────────────
 function renderNetwork(s) {
   const t = now();
-  const series = s.series[0];
+  // The series in view: the one picked on the Buy page.
+  const series = s.series.find((x) => x.id === selected) ?? s.series[0];
   const parts = series ? escrowParts(series) : null;
   const released = s.series.reduce((a, x) => a + BigInt(x.released), 0n);
   const burned = s.series.reduce((a, x) => a + Number(x.burned), 0);
@@ -834,14 +838,15 @@ function renderNetwork(s) {
   $("#k-released").textContent = usdc(released);
   $("#k-released-s").textContent = `For ${int(burned)} units delivered`;
 
-  const key = liveKey(s.keys, t);
-  const latest = key ?? [...s.keys].sort((a, b) => b.expires_at - a.expires_at)[0] ?? null;
+  const grade = (series && s.grades.find((g) => g.id === series.grade_id)) ?? s.grades[0];
+  const keys = (grade && s.keysByGrade?.[grade.id]) ?? s.keys;
+  const key = liveKey(keys, t);
+  const latest = key ?? [...keys].sort((a, b) => b.expires_at - a.expires_at)[0] ?? null;
   $("#k-key").innerHTML = latest ? `<i class="dot ${key ? "ok" : "bad"}"></i>${key ? "Live" : "Expired"}` : "None";
   $("#k-key-s").textContent = !latest ? "No key registered" : key ? `${span(key.expires_at - t)} left` : `Expired ${ago(latest.expires_at, t)}`;
 
   if (series) {
     const open = t < series.window_end;
-    const grade = s.grades.find((g) => g.id === series.grade_id);
     $("#series-title").textContent = `Series ${series.id}`;
     $("#series-sub").textContent = `${grade?.model_id ?? series.grade_id} · operator ${series.operator}`;
     status($("#series-state"), open ? "ok" : "", open ? "Open" : "Refunding");
@@ -854,7 +859,6 @@ function renderNetwork(s) {
     renderSplit(parts);
   }
 
-  const grade = s.grades[0];
   $("#key-model").textContent = grade ? `Ed25519 key for ${grade.model_id}` : "Ed25519 key";
   status($("#key-state"), key ? "ok" : "bad", key ? "Live" : latest ? "Expired" : "None");
   if (latest) {
@@ -887,9 +891,22 @@ function renderNetwork(s) {
     ["Escrow cap", `${usdc(c.max_total_escrow, { min: 0 })} ${unit()}`],
     ["Series cap", `${barrels(c.max_series_units)} Barrels`],
     ["Model key TTL", grade ? span(grade.key_ttl_sec) : "–"],
+    ...(c.attestor ? [["Keys registered by", link(c.attestor)]] : []),
+    ...(c.timelock_sec ? [["Change timelock", span(c.timelock_sec)]] : []),
+    ...(c.claim_window_sec ? [["Claim window", span(c.claim_window_sec)]] : []),
+    ...(c.guardian ? [["Guardian", link(c.guardian)]] : []),
     ["WASM sha256", `<span title="${escapeHtml(deployment.wasm_sha256 ?? "")}">${escapeHtml(short(deployment.wasm_sha256 ?? "", 10, 6))}</span>`],
   ];
   $("#c-kv").innerHTML = kv.map(([k, v]) => `<div><dt>${k}</dt><dd class="mono">${v}</dd></div>`).join("");
+  // What the contract itself guarantees about who registers keys and who can change the code.
+  $("#attest-label").textContent = c.attestor && !c.owner_registers_keys ? "Checked on chain before registration" : "Checked before registration";
+  if (c.attestor && !c.owner_registers_keys) {
+    $("#limit-key").innerHTML = `<h3 class="h4">Who registered the key</h3><p class="label">Only the attestor contract can: it checks Intel's quote, the nonce and the measured software on chain before any key counts. Anyone can run it; the owner cannot add keys.</p>`;
+  }
+  const changes = c.timelock_sec ? `Owner, attestor and code changes are announced on chain and wait ${span(c.timelock_sec)} before they apply.` : "The contract is upgradeable by its owner key.";
+  $("#limit-money").innerHTML = testnet()
+    ? `<h3 class="h4">Testnet money</h3><p class="label">This build reads the testnet development deployment. tUSDC is a test token with no value. ${changes}</p>`
+    : `<h3 class="h4">Real money, low caps</h3><p class="label">This is mainnet USDC. The contract caps how much it holds. ${changes}</p>`;
   first = false;
 }
 
@@ -1088,7 +1105,6 @@ $("#disconnect").addEventListener("click", async () => { await near?.disconnect(
     $("#crumb").href = `${EXPLORER}/address/${deployment.contract}`;
     $("#net-name").textContent = `NEAR ${deployment.network}`;
     $$("[data-unit]").forEach((el) => { el.textContent = unit(); });
-    if (testnet()) $("#limit-money").innerHTML = `<h3 class="h4">Testnet money</h3><p class="label">This build reads the testnet development deployment. tUSDC is a test token with no value. The contract is upgradeable by its owner key.</p>`;
     $("#key-copy").addEventListener("click", (e) => copyText($("#key-hex").textContent, e.currentTarget));
     ({ sample, gateway: gatewaySample } = await loadSamples(ROOT));
     show(sample, false, sampleLabel());

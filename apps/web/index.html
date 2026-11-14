@@ -233,7 +233,7 @@
       </details>
       <details class="faq" name="faq">
         <summary>What does an answer cost?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
-        <div class="faq-a"><p>You buy Barrels of one model at a fixed price: <span data-faq="price">0.60</span> <span data-unit>USDC</span> per Barrel for <span data-faq="model">z-ai/glm-5.3-flash</span>. One Barrel is 1,000,000 units. An answer costs one unit per completion token plus <span data-faq="weight">16%</span> of a unit per prompt token.</p></div>
+        <div class="faq-a"><p>You buy Barrels of a model at its series' fixed price: <span data-faq="price">0.60</span> <span data-unit>USDC</span> per Barrel for <span data-faq="model">z-ai/glm-5.3-flash</span><span data-faq="models-note"></span>. One Barrel is 1,000,000 units. An answer costs one unit per completion token plus <span data-faq="weight">16%</span> of a unit per prompt token.</p></div>
       </details>
       <details class="faq" name="faq">
         <summary>When does the operator get paid?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
@@ -245,7 +245,7 @@
       </details>
       <details class="faq" name="faq">
         <summary>What does a receipt not prove?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>
-        <div class="faq-a"><p>It does not identify the machine that served the answer. NVIDIA GPU evidence is not checked yet. In this version Barrel's registrar checks attestations off-chain, though anyone can repeat the checks with <code>barrel audit</code>. The operator sees prompts and answers in plaintext.</p></div>
+        <div class="faq-a" id="faq-limits"><p>It does not identify the machine that served the answer. NVIDIA GPU evidence is not checked yet. In this version Barrel's registrar checks attestations off-chain, though anyone can repeat the checks with <code>barrel audit</code>. The operator sees prompts and answers in plaintext.</p></div>
       </details>
       <details class="faq" name="faq">
         <summary>What happens if a check fails?<svg class="chev" aria-hidden="true"><use href="assets/img/icons.svg#chevron"/></svg></summary>

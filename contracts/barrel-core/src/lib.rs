@@ -47,6 +47,38 @@ pub fn ack_text(
     format!("barrel:v1:ack:{contract}:{tank_id}:{seq}:{request_hash}:{response_hash}:{units}")
 }
 
+/// The text a tank key signs to ask the Pump for one answer. It caps what the
+/// request may cost before any tokens are generated. It reaches the chain
+/// only when the operator claims an answer the payer did not acknowledge.
+pub fn request_auth_text(
+    contract: &str,
+    tank_id: u64,
+    seq: u64,
+    request_hash: &str,
+    max_units: u128,
+) -> String {
+    format!("barrel:v1:req:{contract}:{tank_id}:{seq}:{request_hash}:{max_units}")
+}
+
+/// The text a tank key signs to hand a tank it owns to a NEAR account.
+/// Only tanks opened by a purchase for the key itself can be assigned.
+pub fn assign_text(contract: &str, tank_id: u64, new_owner: &str) -> String {
+    format!("barrel:v1:assign:{contract}:{tank_id}:{new_owner}")
+}
+
+/// Units charged for one answer:
+/// completion_tokens + ceil(prompt_tokens x input_weight_bps / 10,000).
+pub fn units_charged(prompt_tokens: u64, completion_tokens: u64, input_weight_bps: u32) -> u128 {
+    let weighted = (prompt_tokens as u128 * input_weight_bps as u128).div_ceil(10_000);
+    completion_tokens as u128 + weighted
+}
+
+/// The most units a request can cost, known before it is sent: every request
+/// byte is at most one prompt token, and the answer is capped by `max_tokens`.
+pub fn worst_case_units(request_bytes: u64, max_tokens: u64, input_weight_bps: u32) -> u128 {
+    units_charged(request_bytes, max_tokens, input_weight_bps)
+}
+
 /// USDC owed for `units` at `price` per Barrel, rounded down.
 /// Payouts and refunds are always computed as the difference of two of these
 /// cumulative values, so rounding never accumulates.
@@ -95,6 +127,25 @@ mod tests {
         assert_eq!(
             ack_text("barrel.testnet", 7, 3, &rq, &rs, 1200),
             format!("barrel:v1:ack:barrel.testnet:7:3:{rq}:{rs}:1200")
+        );
+    }
+
+    #[test]
+    fn units_follow_the_published_formula() {
+        // 1,000 prompt tokens at 16% weight = 160 units, plus 50 completion.
+        assert_eq!(units_charged(1_000, 50, 1_600), 210);
+        // The prompt share rounds up.
+        assert_eq!(units_charged(1, 0, 1_600), 1);
+        assert_eq!(units_charged(0, 7, 1_600), 7);
+        assert_eq!(worst_case_units(300, 512, 10_000), 812);
+        let rq = "1".repeat(64);
+        assert_eq!(
+            request_auth_text("barrel.testnet", 7, 3, &rq, 900),
+            format!("barrel:v1:req:barrel.testnet:7:3:{rq}:900")
+        );
+        assert_eq!(
+            assign_text("barrel.testnet", 7, "alice.testnet"),
+            "barrel:v1:assign:barrel.testnet:7:alice.testnet"
         );
     }
 

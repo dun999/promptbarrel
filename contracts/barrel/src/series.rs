@@ -1,8 +1,13 @@
 //! Series: one operator, one grade, one price, one expiry.
 //! Buying mints Barrels and holds the USDC in escrow. The operator is paid
-//! only by `settle` (see tank.rs). After expiry, unused Barrels refund.
+//! only for proven answers (see tank.rs). After expiry, unused Barrels refund.
+//!
+//! A purchase can carry a `tank_key`. The Barrels then go straight into a
+//! tank owned by that key, so an agent with a key and no account can be
+//! funded by anyone, from any chain, and nobody else can take the tank back.
 
-use crate::util::{now_sec, units_for, usdc_ceil, usdc_floor};
+use crate::firm::{Firm, FirmTerms};
+use crate::util::{normalize_key, now_sec, units_for, usdc_ceil, usdc_floor};
 use crate::{
     events, near, require, AccountId, Contract, ContractExt, GAS_CALLBACK, RECORD_DEPOSIT, U128,
 };
@@ -38,13 +43,20 @@ pub struct Series {
     pub refund_paid: U128,
     /// Earned but not yet transferred to the operator.
     pub payable: U128,
+    /// Set on a firm series: the operator's bond and its duty to answer.
+    pub firm: Option<Firm>,
 }
 
+/// The `msg` of a USDC `ft_transfer_call`. Exactly one of `series_id`
+/// (a purchase) or `bond_series` (an operator adding to its bond).
 #[near(serializers = [json])]
-pub struct BuyMsg {
-    pub series_id: u64,
+pub struct TransferMsg {
+    pub series_id: Option<u64>,
     /// Who receives the Barrels. Defaults to the sender.
     pub to: Option<AccountId>,
+    /// Put the Barrels straight into a tank owned by this Ed25519 key.
+    pub tank_key: Option<String>,
+    pub bond_series: Option<u64>,
 }
 
 #[near]
@@ -60,6 +72,7 @@ impl Contract {
         price_per_barrel: U128,
         window_end: u64,
         cap_units: U128,
+        firm: Option<FirmTerms>,
     ) -> u64 {
         self.assert_live();
         require!(
@@ -92,6 +105,7 @@ impl Contract {
             released: U128(0),
             refund_paid: U128(0),
             payable: U128(0),
+            firm: firm.map(Firm::open),
         };
         events::barrel("open_series", json!({ "series": &series }));
         self.series.insert(id, series);
@@ -128,14 +142,23 @@ impl Contract {
             "only the configured USDC token is accepted"
         );
         self.assert_live();
-        let buy: BuyMsg = serde_json::from_str(&msg)
+        let msg: TransferMsg = serde_json::from_str(&msg)
             .unwrap_or_else(|_| env::panic_str("msg must be {\"series_id\": <number>}"));
+        if let Some(series_id) = msg.bond_series {
+            require!(msg.series_id.is_none(), "one of series_id or bond_series");
+            self.add_bond(series_id, &sender_id, amount.0);
+            return PromiseOrValue::Value(U128(0));
+        }
+        let series_id = msg
+            .series_id
+            .unwrap_or_else(|| env::panic_str("msg must be {\"series_id\": <number>}"));
         let mut series = self
             .series
-            .get(&buy.series_id)
+            .get(&series_id)
             .cloned()
             .unwrap_or_else(|| env::panic_str("unknown series"));
         require!(now_sec() < series.window_end, "series expired");
+        require!(!series.defaulted(), "series defaulted");
 
         let price = series.price_per_barrel.0;
         let room = series.cap_units.0 - series.minted.0;
@@ -148,19 +171,41 @@ impl Contract {
             "global escrow cap reached"
         );
 
-        let to = buy.to.unwrap_or(sender_id.clone());
         series.minted.0 += units;
         series.escrow_in.0 += cost;
         self.total_escrow += cost;
-        self.series.insert(series.id, series.clone());
-        self.credit(&to, series.id, units);
 
-        events::mt_mint(&to, series.id, units);
-        events::barrel(
-            "buy",
-            json!({ "series_id": series.id, "buyer": sender_id, "to": to,
-                    "units": U128(units), "usdc": U128(cost) }),
-        );
+        match msg.tank_key {
+            None => {
+                let to = msg.to.unwrap_or(sender_id.clone());
+                self.series.insert(series.id, series.clone());
+                self.credit(&to, series.id, units);
+                events::mt_mint(&to, series.id, units);
+                events::barrel(
+                    "buy",
+                    json!({ "series_id": series.id, "buyer": sender_id, "to": to,
+                            "units": U128(units), "usdc": U128(cost) }),
+                );
+            }
+            Some(key) => {
+                require!(msg.to.is_none(), "a tank purchase is owned by its key, not by `to`");
+                require!(
+                    units >= self.config.min_tank_buy_units.0,
+                    "below the smallest purchase that opens a tank"
+                );
+                let key = normalize_key(&key).unwrap_or_else(|| env::panic_str("bad tank key"));
+                series.in_tanks.0 += units;
+                self.series.insert(series.id, series.clone());
+                let contract = env::current_account_id();
+                events::mt_mint(&contract, series.id, units);
+                let tank_id = self.fund_key_tank(series.id, &key, units);
+                events::barrel(
+                    "buy",
+                    json!({ "series_id": series.id, "buyer": sender_id, "tank_id": tank_id,
+                            "tank_key": key, "units": U128(units), "usdc": U128(cost) }),
+                );
+            }
+        }
         PromiseOrValue::Value(U128(amount.0 - cost))
     }
 
@@ -170,10 +215,15 @@ impl Contract {
             .series
             .get(&series_id)
             .unwrap_or_else(|| env::panic_str("unknown series"));
-        series.window_end + self.config.settle_grace_sec
+        match series.firm.as_ref().and_then(|f| f.defaulted_at) {
+            Some(at) => at.min(series.window_end + self.config.settle_grace_sec),
+            None => series.window_end + self.config.settle_grace_sec,
+        }
     }
 
     /// After expiry: burn unused Barrels for the USDC that backed them.
+    /// On a firm series that defaulted, refunds open at once and each Barrel
+    /// also takes its share of the operator's bond.
     pub fn refund(&mut self, series_id: u64, units: U128) -> PromiseOrValue<U128> {
         let account = env::predecessor_account_id();
         let mut series = self
@@ -182,7 +232,7 @@ impl Contract {
             .cloned()
             .unwrap_or_else(|| env::panic_str("unknown series"));
         require!(
-            now_sec() >= series.window_end + self.config.settle_grace_sec,
+            series.defaulted() || now_sec() >= series.window_end + self.config.settle_grace_sec,
             "refunds open after the series expires"
         );
         require!(units.0 > 0, "nothing to refund");
@@ -193,21 +243,30 @@ impl Contract {
         series.refunded.0 += units.0;
         let amount = usdc_floor(series.refunded.0, price) - before;
         series.refund_paid.0 += amount;
+        // The bond share of a defaulted firm series, with the same
+        // cumulative rounding as the refund itself.
+        let comp = match series.firm.as_mut() {
+            Some(firm) if firm.defaulted_at.is_some() => firm.take_comp(units.0),
+            _ => 0,
+        };
         self.series.insert(series_id, series);
+        self.total_escrow -= amount;
+        self.total_bond -= comp;
 
         events::mt_burn(&account, series_id, units.0, "refund");
         events::barrel(
             "refund",
-            json!({ "series_id": series_id, "account": account, "units": units, "usdc": U128(amount) }),
+            json!({ "series_id": series_id, "account": account, "units": units,
+                    "usdc": U128(amount), "bond_share": U128(comp) }),
         );
-        if amount == 0 {
+        if amount + comp == 0 {
             return PromiseOrValue::Value(U128(0));
         }
         PromiseOrValue::Promise(
-            self.send_usdc(&account, amount).then(
+            self.transfer_usdc(&account, amount + comp).then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_CALLBACK)
-                    .on_refund(account, series_id, units, U128(amount)),
+                    .on_refund(account, series_id, units, U128(amount), U128(comp)),
             ),
         )
     }
@@ -219,17 +278,22 @@ impl Contract {
         series_id: u64,
         units: U128,
         amount: U128,
+        comp: U128,
     ) -> U128 {
         if is_promise_success() {
-            return amount;
+            return U128(amount.0 + comp.0);
         }
         // The USDC transfer failed (for example the holder is not registered
         // with the token). Put everything back so they can try again.
         let mut series = self.series.get(&series_id).cloned().unwrap();
         series.refunded.0 -= units.0;
         series.refund_paid.0 -= amount.0;
+        if let Some(firm) = series.firm.as_mut() {
+            firm.return_comp(units.0, comp.0);
+        }
         self.series.insert(series_id, series);
         self.total_escrow += amount.0;
+        self.total_bond += comp.0;
         self.credit(&account, series_id, units.0);
         events::mt_mint(&account, series_id, units.0);
         events::barrel(
@@ -278,6 +342,17 @@ impl Contract {
     }
 }
 
+impl Series {
+    pub(crate) fn defaulted(&self) -> bool {
+        self.firm.as_ref().map(|f| f.defaulted_at.is_some()).unwrap_or(false)
+    }
+
+    /// Barrels that still exist: in wallets and in tanks.
+    pub(crate) fn outstanding(&self) -> u128 {
+        self.minted.0 - self.burned.0 - self.refunded.0
+    }
+}
+
 impl Contract {
     pub(crate) fn pay_operator(&mut self, series_id: u64) -> Option<near_sdk::Promise> {
         let mut series = self
@@ -286,6 +361,7 @@ impl Contract {
             .cloned()
             .unwrap_or_else(|| env::panic_str("unknown series"));
         let amount = series.payable.0;
+        // A defaulted operator is still paid for what it proved.
         if amount == 0 {
             return None;
         }

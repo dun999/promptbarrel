@@ -6,6 +6,10 @@
 // contract mints the Barrels straight to the buyer's NEAR account: the buyer
 // never holds USDC on NEAR and signs nothing on NEAR to buy.
 //
+// With `tankKey` instead of `to`, the message is {"series_id": N, "tank_key": K}
+// and the Barrels land in a tank owned by that key: an agent with a key and
+// no NEAR account is funded from any chain, and nobody else can take the tank.
+//
 // Fetch only, no Node APIs: the browser app and the CLI share this file.
 //
 // Without a 1Click JWT the API adds a 0.25% platform fee; pass `jwt` to use
@@ -50,7 +54,9 @@ export interface BuyRoute {
   usdc: string;
   seriesId: number;
   /** The NEAR account that receives the Barrels. */
-  to: string;
+  to?: string;
+  /** Instead of `to`: the Ed25519 key whose tank receives them. */
+  tankKey?: string;
   dry?: boolean;
   slippageBps?: number;
   /** Minutes until 1Click refunds an unfinished swap. */
@@ -76,9 +82,13 @@ export async function usdcOrigins(): Promise<OriginToken[]> {
 /** The buy message the Barrel contract reads in `ft_on_transfer`. */
 export const buyMsg = (seriesId: number, to: string) => JSON.stringify({ series_id: seriesId, to });
 
+/** The message that puts the purchase straight into a tank owned by `tankKey`. */
+export const tankBuyMsg = (seriesId: number, tankKey: string) => JSON.stringify({ series_id: seriesId, tank_key: tankKey });
+
 /** A quote for buying Barrels from another chain. With `dry: false` it carries a deposit address. */
 export async function quoteBuy(r: BuyRoute): Promise<BuyQuote> {
   const deadline = new Date(Date.now() + (r.deadlineMin ?? 30) * 60_000).toISOString();
+  if (!r.to === !r.tankKey) throw new Error("a route delivers to an account (`to`) or to a tank key (`tankKey`), one of them");
   const out = await api<{ quote: BuyQuote }>("/v0/quote", {
     method: "POST",
     jwt: r.jwt,
@@ -94,7 +104,7 @@ export async function quoteBuy(r: BuyRoute): Promise<BuyQuote> {
       refundType: "ORIGIN_CHAIN",
       recipient: r.contract,
       recipientType: "DESTINATION_CHAIN",
-      customRecipientMsg: buyMsg(r.seriesId, r.to),
+      customRecipientMsg: r.tankKey ? tankBuyMsg(r.seriesId, r.tankKey) : buyMsg(r.seriesId, r.to!),
       deadline,
     }),
   });

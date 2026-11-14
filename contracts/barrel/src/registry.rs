@@ -1,9 +1,16 @@
 //! Grades (which model, how units are counted) and the model TEE keys that
 //! are allowed to produce receipts for each grade.
 //!
-//! v1 trust root: keys are added by the owner after off-chain attestation
-//! checks, with the hash of the published evidence bundle stored beside each
-//! key so anyone can repeat the checks.
+//! A key is registered by the attestor contract, which verifies the TEE's
+//! attestation on-chain and needs nobody's permission. While
+//! `owner_registers_keys` is on, the owner can also register a key after the
+//! same checks done off-chain. Either way the hash of the evidence is stored
+//! beside the key so anyone can repeat the checks.
+//!
+//! Why a key from the wrong model is harmless: a model TEE signs
+//! `<its own model id>:<request_hash>:<response_hash>`. A receipt is checked
+//! against the grade's model id, so a key that belongs to another model can
+//! never produce a signature this contract accepts for the grade.
 
 use crate::util::{is_hash_hex, normalize_key, now_sec, receipt_text, verify_ed25519};
 use crate::{events, near, require, Contract, ContractExt};
@@ -31,8 +38,10 @@ pub struct KeyInfo {
     pub key: String,
     pub registered_at: u64,
     pub expires_at: u64,
-    /// SHA-256 of the published attestation evidence bundle.
+    /// SHA-256 of the attestation evidence the registration rested on.
     pub evidence_hash: String,
+    /// Who registered it: the attestor contract or the owner.
+    pub by: near_sdk::AccountId,
 }
 
 #[near(serializers = [json])]
@@ -71,7 +80,12 @@ impl Contract {
     /// Registers a model TEE signing key for a grade, or renews it.
     /// The expiry is set by the contract from the grade's TTL.
     pub fn add_key(&mut self, grade_id: String, key: String, evidence_hash: String) -> KeyInfo {
-        self.assert_owner();
+        let by = near_sdk::env::predecessor_account_id();
+        let from_attestor = Some(&by) == self.config.attestor.as_ref();
+        require!(
+            from_attestor || (by == self.config.owner && self.config.owner_registers_keys),
+            "keys are registered by the attestor contract"
+        );
         let grade = self
             .grades
             .get(&grade_id)
@@ -85,6 +99,7 @@ impl Contract {
             Some(existing) => {
                 existing.expires_at = expires_at;
                 existing.evidence_hash = evidence_hash;
+                existing.by = by;
                 existing.clone()
             }
             None => {
@@ -94,6 +109,7 @@ impl Contract {
                     registered_at: now,
                     expires_at,
                     evidence_hash,
+                    by,
                 };
                 list.push(info.clone());
                 info

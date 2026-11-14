@@ -6,7 +6,11 @@ import {
   ackText,
   bytesToBase64,
   checkReceipt,
+  looksSealed,
+  openWith,
   publicKeyOf,
+  sealTo,
+  SEALED_RESPONSE_FIELDS,
   requestAuthText,
   sha256Hex,
   signEd25519,
@@ -31,6 +35,11 @@ export interface AskInput {
   secretKey: string;
   question: string;
   maxTokens?: number;
+  /**
+   * Encrypt the question to the model's attested key, and have the answer
+   * encrypted back to the tank key. The Pump relays ciphertext it cannot read.
+   */
+  private?: boolean;
 }
 
 export interface AskResult {
@@ -41,6 +50,8 @@ export interface AskResult {
   receipt: Receipt;
   checks: Check[];
   settleTx?: string;
+  /** Set on a private ask: the model key the question was encrypted to. */
+  sealedTo?: string;
 }
 
 export class ProofError extends Error {
@@ -99,11 +110,26 @@ export async function ask(input: AskInput): Promise<AskResult> {
   const pumpUrl = input.endpoint.replace(/\/+$/, "");
   const maxTokens = input.maxTokens ?? 800;
 
+  // Private: the question leaves this browser encrypted to the newest live
+  // key the contract has registered for the model, the key that signs answers.
+  let sealedTo: string | undefined;
+  if (input.private) {
+    const now = Date.now() / 1000;
+    const keys = ((await view(contractId, "get_keys", { grade_id: grade.id })) as { key: string; expires_at: number; registered_at: number }[])
+      .filter((k) => now < k.expires_at)
+      .sort((a, b) => b.registered_at - a.registered_at);
+    if (!keys[0]) throw new Error("no live attested model key is registered, so there is nothing to encrypt to");
+    sealedTo = keys[0].key;
+  }
+  const e2ee: Record<string, string> = sealedTo
+    ? { "x-signing-algo": "ed25519", "x-client-pub-key": tank.key, "x-model-pub-key": sealedTo, "x-encryption-version": "2" }
+    : {};
+
   // Built once: these exact bytes are what the model TEE signs.
   const request = utf8(
     JSON.stringify({
       model: grade.model_id,
-      messages: [{ role: "user", content: input.question }],
+      messages: [{ role: "user", content: sealedTo ? sealTo(sealedTo, input.question) : input.question }],
       // This model reasons before answering; "low" keeps short questions short.
       reasoning_effort: "low",
       max_tokens: maxTokens,
@@ -122,6 +148,7 @@ export async function ask(input: AskInput): Promise<AskResult> {
         "x-barrel-seq": String(seq),
         "x-barrel-max-units": maxUnits.toString(),
         "x-barrel-sig": signEd25519(requestAuthText(contractId, tank.id, seq, requestHash, maxUnits), secretKey),
+        ...e2ee,
       },
       body: request as Uint8Array<ArrayBuffer>, // the exact bytes that were hashed and signed
     });
@@ -179,6 +206,25 @@ export async function ask(input: AskInput): Promise<AskResult> {
   if (!onChain.valid || !onChain.key_live) fail(`the contract does not accept this signature: ${onChain.reason ?? "key expired"}`);
 
   const parsed = JSON.parse(decoder.decode(response));
+  if (sealedTo) {
+    // The signature covers the ciphertext; it is opened only here, after the checks.
+    checks.push({
+      name: "the answer was signed by the key the question was encrypted to",
+      ok: receipt.signing_address === sealedTo,
+      detail: `model key ${sealedTo.slice(0, 12)}…`,
+    });
+    if (receipt.signing_address !== sealedTo) fail("the answer was signed by a different key than the question was encrypted to");
+    const message = parsed.choices?.[0]?.message ?? {};
+    let opened = 0;
+    for (const field of SEALED_RESPONSE_FIELDS) {
+      if (looksSealed(message[field])) {
+        message[field] = openWith(secretKey, message[field]);
+        opened += 1;
+      }
+    }
+    checks.push({ name: "the answer came back encrypted to this tank's key", ok: opened > 0, detail: `${opened} field(s) decrypted in this browser` });
+    if (opened === 0) fail("the answer was not encrypted to this tank's key");
+  }
   const usage = parsed.usage as Usage | undefined;
   if (!usage) fail("the signed answer has no usage object");
   const metered = unitsFor(usage!, grade.input_weight_bps);
@@ -212,6 +258,7 @@ export async function ask(input: AskInput): Promise<AskResult> {
     receipt,
     checks,
     settleTx: ackBody.settle_tx,
+    sealedTo,
   };
 }
 

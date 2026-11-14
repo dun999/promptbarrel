@@ -11,13 +11,23 @@
 //!      under a key registered for the series' grade.
 //! Only then do units burn and USDC leave escrow.
 //!
+//! `claim_unacked` covers the payer who takes an answer and never signs the
+//! ack. The operator shows the payer's own request authorization, which
+//! names the most units the request may cost, and the model's signature for
+//! that request. The claim waits out a window in which the payer's ack
+//! replaces it at the true unit count. If no ack comes, the authorized
+//! maximum is charged: that is the price of not cooperating.
+//!
 //! A job tank names an agent: someone else's agent does the work and spends
 //! the tank on its own thinking. The owner (the client) either accepts the
 //! job, and the leftover is paid to the agent in USDC, or unlocks the tank and
 //! takes the leftover back. Either way the operator keeps what it delivered,
 //! because both paths wait for the same unlock delay before money moves.
 
-use crate::util::{ack_text, is_hash_hex, normalize_key, now_sec, receipt_text, usdc_floor, verify_ed25519};
+use crate::util::{
+    ack_text, assign_text, is_hash_hex, normalize_key, now_sec, receipt_text, request_auth_text,
+    usdc_floor, verify_ed25519,
+};
 use crate::{
     events, near, require, AccountId, Contract, ContractExt, GAS_CALLBACK, RECENT_CAP,
     RECORD_DEPOSIT, U128,
@@ -46,6 +56,26 @@ pub struct Tank {
     pub agent: Option<AccountId>,
     /// The owner accepted the job. The leftover goes to the agent, never back.
     pub accepted: bool,
+    /// Units set aside for an open claim or forced request. Not spendable
+    /// and not withdrawable until that is resolved.
+    pub reserved: U128,
+    /// An answer the operator says was served and never acknowledged.
+    pub claim: Option<Claim>,
+}
+
+#[near(serializers = [json, borsh])]
+#[derive(Clone)]
+pub struct Claim {
+    pub seq: u64,
+    pub request_hash: String,
+    pub response_hash: String,
+    /// The maximum the payer authorized for this request.
+    pub units: U128,
+    pub tee_key: String,
+    pub tee_sig: String,
+    pub at: u64,
+    /// Unix seconds. Until then the payer's ack replaces the claim.
+    pub ready_at: u64,
 }
 
 #[near(serializers = [json])]
@@ -73,6 +103,9 @@ pub struct SettleRecord {
     pub tee_key: String,
     pub tee_sig: String,
     pub at: u64,
+    /// How it was paid: "ack" (the payer signed), "claim" (the operator
+    /// claimed and no ack came) or "forced" (answered through the chain).
+    pub kind: String,
 }
 
 #[near]
@@ -94,28 +127,32 @@ impl Contract {
             require!(*agent != env::current_account_id(), "the agent cannot be this contract");
         }
         self.move_into_tank(&owner, series_id, units.0);
+        self.open_tank(series_id, owner, key, units.0, agent)
+    }
 
-        let id = self.next_tank_id;
-        self.next_tank_id += 1;
-        let tank = Tank {
-            id,
-            series_id,
-            owner: owner.clone(),
-            key,
-            balance: units,
-            spent: U128(0),
-            next_seq: 0,
-            unlock_at: None,
-            closed: false,
-            agent,
-            accepted: false,
-        };
-        let mut mine = self.tanks_by_owner.get(&owner).cloned().unwrap_or_default();
-        mine.push(id);
-        self.tanks_by_owner.insert(owner, mine);
-        events::barrel("fill", json!({ "tank": &tank }));
-        self.tanks.insert(id, tank);
-        id
+    /// Hands a tank that its own key owns to a NEAR account. A tank bought
+    /// with `tank_key` belongs to the key, so an agent with no account can
+    /// hold one; this is how it later moves the tank to an account that can
+    /// unlock, withdraw and refund. Anyone can relay the signed message.
+    pub fn assign(&mut self, tank_id: u64, new_owner: AccountId, sig: String) {
+        let mut tank = self.tank(tank_id);
+        require!(!tank.closed, "tank closed");
+        require!(tank.owner.as_str() == tank.key, "only a tank owned by its key can be assigned");
+        let text = assign_text(env::current_account_id().as_str(), tank_id, new_owner.as_str());
+        require!(
+            verify_ed25519(&sig, text.as_bytes(), &tank.key),
+            "not signed by the tank key"
+        );
+        let mut old = self.tanks_by_owner.get(&tank.owner).cloned().unwrap_or_default();
+        old.retain(|id| *id != tank_id);
+        self.tanks_by_owner.insert(tank.owner.clone(), old);
+        let mut new = self.tanks_by_owner.get(&new_owner).cloned().unwrap_or_default();
+        new.push(tank_id);
+        self.tanks_by_owner.insert(new_owner.clone(), new);
+        self.tank_by_key.remove(&tank.key);
+        events::barrel("assign", json!({ "tank_id": tank_id, "from": &tank.owner, "to": &new_owner }));
+        tank.owner = new_owner;
+        self.tanks.insert(tank_id, tank);
     }
 
     /// Adds more Barrels to an existing tank. Cancels a pending unlock.
@@ -142,7 +179,7 @@ impl Contract {
         );
         let mut tank = self.tank(tank_id);
         require!(!tank.closed, "tank closed");
-        let mut series = self.series.get(&tank.series_id).cloned().unwrap();
+        let series = self.series.get(&tank.series_id).cloned().unwrap();
         let now = now_sec();
         require!(
             now < series.window_end + self.config.settle_grace_sec,
@@ -158,6 +195,19 @@ impl Contract {
                 is_hash_hex(&item.request_hash) && is_hash_hex(&item.response_hash),
                 "hashes must be 64 lowercase hex characters"
             );
+            // The payer's ack replaces an operator claim for the same request.
+            if let Some(claim) = tank.claim.take() {
+                require!(
+                    claim.request_hash == item.request_hash,
+                    "a claim is open for a different request at this sequence number"
+                );
+                tank.balance.0 += claim.units.0;
+                tank.reserved.0 -= claim.units.0;
+                events::barrel(
+                    "claim_superseded",
+                    json!({ "tank_id": tank_id, "seq": claim.seq, "claimed": claim.units, "acked": item.units }),
+                );
+            }
             let units = item.units.0;
             require!(units > 0, "zero units");
             require!(units <= tank.balance.0, "more units than the tank holds");
@@ -204,30 +254,128 @@ impl Contract {
                 tee_key,
                 tee_sig: item.tee_sig.clone(),
                 at: now,
+                kind: "ack".to_string(),
             };
             events::barrel("settle", json!({ "record": &record }));
             self.remember(record);
         }
 
-        // Burn the delivered units and release exactly the USDC they earned.
-        let price = series.price_per_barrel.0;
-        let before = usdc_floor(series.burned.0, price);
-        series.burned.0 += total;
-        series.in_tanks.0 -= total;
-        let earned = usdc_floor(series.burned.0, price) - before;
-        series.released.0 += earned;
-        series.payable.0 += earned;
-        let series_id = series.id;
-        self.series.insert(series_id, series);
         self.tanks.insert(tank_id, tank);
-        events::mt_burn(&contract, series_id, total, "delivered");
-
-        // Detached on purpose: a failed transfer is re-credited by `on_payout`
-        // and can be retried with `claim`.
-        if let Some(payout) = self.pay_operator(series_id) {
-            payout.detach();
-        }
+        self.burn_delivered(series, total, items.len() as u32);
         U128(total)
+    }
+
+    /// The operator claims an answer the payer never acknowledged. It shows
+    /// the payer's request authorization (signed by the tank key before the
+    /// request ran) and the model's signature for that request. Nothing is
+    /// paid yet: the claim waits `claim_window_sec`, and the payer's ack for
+    /// the same request, sent through `settle`, replaces it.
+    /// Returns when the claim can be finalized, in Unix seconds.
+    #[allow(clippy::too_many_arguments)]
+    pub fn claim_unacked(
+        &mut self,
+        tank_id: u64,
+        seq: u64,
+        request_hash: String,
+        max_units: U128,
+        auth_sig: String,
+        response_hash: String,
+        tee_key: String,
+        tee_sig: String,
+    ) -> u64 {
+        self.assert_live();
+        let mut tank = self.tank(tank_id);
+        require!(!tank.closed, "tank closed");
+        let series = self.series.get(&tank.series_id).cloned().unwrap();
+        require!(
+            env::predecessor_account_id() == series.operator,
+            "series operator only"
+        );
+        let now = now_sec();
+        require!(
+            now < series.window_end + self.config.settle_grace_sec,
+            "settlement closed for this series"
+        );
+        require!(tank.claim.is_none(), "a claim is already open on this tank");
+        require!(seq == tank.next_seq, "wrong sequence number");
+        require!(
+            is_hash_hex(&request_hash) && is_hash_hex(&response_hash),
+            "hashes must be 64 lowercase hex characters"
+        );
+        require!(max_units.0 > 0, "zero units");
+        require!(max_units.0 <= tank.balance.0, "more units than the tank holds");
+
+        // 1. The payer asked for this request and capped its cost.
+        let contract = env::current_account_id();
+        let auth = request_auth_text(contract.as_str(), tank_id, seq, &request_hash, max_units.0);
+        require!(
+            verify_ed25519(&auth_sig, auth.as_bytes(), &tank.key),
+            "request authorization is not signed by the tank key"
+        );
+
+        // 2. The named model's TEE answered exactly that request.
+        let model_id = self.grades.get(&series.grade_id).unwrap().model_id.clone();
+        let tee_key = normalize_key(&tee_key).unwrap_or_else(|| env::panic_str("bad model key"));
+        require!(
+            self.key_is_live(&series.grade_id, &tee_key, now),
+            "signing key is not a live registered model key for this grade"
+        );
+        let text = receipt_text(&model_id, &request_hash, &response_hash);
+        require!(
+            verify_ed25519(&tee_sig, text.as_bytes(), &tee_key),
+            "model signature does not verify"
+        );
+
+        let ready_at = now + self.config.claim_window_sec;
+        tank.balance.0 -= max_units.0;
+        tank.reserved.0 += max_units.0;
+        let claim = Claim {
+            seq,
+            request_hash,
+            response_hash,
+            units: max_units,
+            tee_key,
+            tee_sig,
+            at: now,
+            ready_at,
+        };
+        events::barrel("claim_unacked", json!({ "tank_id": tank_id, "claim": &claim }));
+        tank.claim = Some(claim);
+        self.tanks.insert(tank_id, tank);
+        ready_at
+    }
+
+    /// Pays a claim whose window passed with no ack. Anyone can call it.
+    pub fn finalize_claim(&mut self, tank_id: u64) -> U128 {
+        let mut tank = self.tank(tank_id);
+        let claim = tank
+            .claim
+            .take()
+            .unwrap_or_else(|| env::panic_str("no claim on this tank"));
+        let now = now_sec();
+        require!(now >= claim.ready_at, "the claim window has not passed");
+        let units = claim.units.0;
+        tank.reserved.0 -= units;
+        tank.spent.0 += units;
+        tank.next_seq += 1;
+        let series = self.series.get(&tank.series_id).cloned().unwrap();
+        let record = SettleRecord {
+            tank_id,
+            series_id: series.id,
+            seq: claim.seq,
+            units: claim.units,
+            request_hash: claim.request_hash,
+            response_hash: claim.response_hash,
+            tee_key: claim.tee_key,
+            tee_sig: claim.tee_sig,
+            at: now,
+            kind: "claim".to_string(),
+        };
+        events::barrel("settle", json!({ "record": &record }));
+        self.remember(record);
+        self.tanks.insert(tank_id, tank);
+        self.burn_delivered(series, units, 1);
+        U128(units)
     }
 
     /// Starts the clock for getting a tank's balance back. On a job tank this
@@ -282,6 +430,10 @@ impl Contract {
             require!(caller == tank.owner, "tank owner only");
         }
         require!(!tank.closed, "tank closed");
+        require!(
+            tank.reserved.0 == 0,
+            "a claim or a forced request is open on this tank; resolve it first"
+        );
         let mut series = self.series.get(&tank.series_id).cloned().unwrap();
         let now = now_sec();
         let settlement_closed = now >= series.window_end + self.config.settle_grace_sec;
@@ -344,6 +496,12 @@ impl Contract {
 
     pub fn get_tank(&self, tank_id: u64) -> Option<Tank> {
         self.tanks.get(&tank_id).cloned()
+    }
+
+    /// The tank a purchase with `tank_key` opened for this key, if any.
+    pub fn get_tank_for_key(&self, key: String) -> Option<Tank> {
+        let key = normalize_key(&key)?;
+        self.tank_by_key.get(&key).and_then(|id| self.tanks.get(id).cloned())
     }
 
     pub fn get_tanks_for(&self, owner: AccountId) -> Vec<Tank> {
@@ -428,7 +586,7 @@ impl Contract {
         )
     }
 
-    fn tank(&self, tank_id: u64) -> Tank {
+    pub(crate) fn tank(&self, tank_id: u64) -> Tank {
         self.tanks
             .get(&tank_id)
             .cloned()
@@ -449,7 +607,90 @@ impl Contract {
         events::mt_transfer(owner, &env::current_account_id(), series_id, units, Some("tank fill"));
     }
 
-    fn remember(&mut self, record: SettleRecord) {
+    /// Burns delivered units, releases exactly the USDC they earned, feeds
+    /// the price index and pays the operator.
+    pub(crate) fn burn_delivered(&mut self, mut series: crate::Series, units: u128, deliveries: u32) {
+        let price = series.price_per_barrel.0;
+        let before = usdc_floor(series.burned.0, price);
+        series.burned.0 += units;
+        series.in_tanks.0 -= units;
+        let earned = usdc_floor(series.burned.0, price) - before;
+        series.released.0 += earned;
+        series.payable.0 += earned;
+        let series_id = series.id;
+        let grade_id = series.grade_id.clone();
+        self.series.insert(series_id, series);
+        self.record_delivery(&grade_id, units, price, deliveries);
+        if units > 0 {
+            events::mt_burn(&env::current_account_id(), series_id, units, "delivered");
+        }
+        // Detached on purpose: a failed transfer is re-credited by `on_payout`
+        // and can be retried with `claim`.
+        if let Some(payout) = self.pay_operator(series_id) {
+            payout.detach();
+        }
+    }
+
+    pub(crate) fn open_tank(
+        &mut self,
+        series_id: u64,
+        owner: AccountId,
+        key: String,
+        units: u128,
+        agent: Option<AccountId>,
+    ) -> u64 {
+        let id = self.next_tank_id;
+        self.next_tank_id += 1;
+        let tank = Tank {
+            id,
+            series_id,
+            owner: owner.clone(),
+            key,
+            balance: U128(units),
+            spent: U128(0),
+            next_seq: 0,
+            unlock_at: None,
+            closed: false,
+            agent,
+            accepted: false,
+            reserved: U128(0),
+            claim: None,
+        };
+        let mut mine = self.tanks_by_owner.get(&owner).cloned().unwrap_or_default();
+        mine.push(id);
+        self.tanks_by_owner.insert(owner, mine);
+        events::barrel("fill", json!({ "tank": &tank }));
+        self.tanks.insert(id, tank);
+        id
+    }
+
+    /// Puts freshly bought units into the tank a key owns, opening one if
+    /// the key has none in this series. The owner is the key's own implicit
+    /// account, so only the key can ever move the tank. A tank that is
+    /// unlocking is left alone: a stranger's top-up must not cancel it.
+    pub(crate) fn fund_key_tank(&mut self, series_id: u64, key: &str, units: u128) -> u64 {
+        if let Some(id) = self.tank_by_key.get(key).copied() {
+            let mut tank = self.tank(id);
+            if !tank.closed
+                && tank.series_id == series_id
+                && tank.unlock_at.is_none()
+                && tank.owner.as_str() == key
+            {
+                tank.balance.0 += units;
+                events::barrel("top_up", json!({ "tank_id": id, "units": U128(units) }));
+                self.tanks.insert(id, tank);
+                return id;
+            }
+        }
+        let owner: AccountId = key
+            .parse()
+            .unwrap_or_else(|_| env::panic_str("bad tank key"));
+        let id = self.open_tank(series_id, owner, key.to_string(), units, None);
+        self.tank_by_key.insert(key.to_string(), id);
+        id
+    }
+
+    pub(crate) fn remember(&mut self, record: SettleRecord) {
         let slot = (self.recent_count % RECENT_CAP as u64) as u32;
         if slot < self.recent.len() {
             self.recent.set(slot, record);

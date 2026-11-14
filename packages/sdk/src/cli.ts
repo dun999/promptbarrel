@@ -13,8 +13,24 @@
 //                                        move Barrels into a tank under a new spend key; with
 //                                        --agent it is a job tank whose leftover pays the agent
 //   barrel accept <tank>                 accept a job tank's work: the leftover goes to the agent
-//   barrel ask <tank> "<question>"       ask through the series' Pump; pay only with proof
+//   barrel ask <tank|key> "<question>" [--private]
+//                                        ask through the series' Pump; pay only with proof.
+//                                        --private: the Pump relays ciphertext it cannot read
 //   barrel unlock <tank> | withdraw <tank> | refund <series> [units]
+//   barrel models                        the models on offer: price, input weight, index price
+//   barrel key                           a new tank key, for an agent with no NEAR account
+//   barrel fund <series> <usdc> [--key <public key>]
+//                                        buy straight into a tank that the key owns
+//   barrel fund-from <chain> <series> <usdc> --refund-to <address> [--key <public key>]
+//                                        the same from another chain (NEAR Intents 1Click, mainnet)
+//   barrel assign <tank> <account>       a key-owned tank hands itself to a NEAR account
+//   barrel force <tank> "<question>"     send a request through the chain to a firm series
+//   barrel canary <series>               make a firm series' operator prove it is serving
+//   barrel forced <id> | slash <id>      a forced request; record a missed deadline
+//   barrel index [grade]                 the settlement price index, from proven deliveries
+//   barrel register <grade>              register the model's key by on-chain attestation (anyone)
+//   barrel sell <series> <units> <usdc> | offers | take <offer id> | unsell <series>
+//                                        resell Barrels inside NEAR Intents (mainnet)
 //
 // Options: --contract <id> (default: deployments/<network>.json), --account <id>,
 //          --pump <url>, --json. ONECLICK_JWT avoids 1Click's 0.25% unauthenticated fee. BARREL_NETWORK=testnet switches network (default mainnet).
@@ -24,10 +40,19 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import {
   attestModel,
+  Attestor,
   Barrel,
   Chain,
+  Intents,
+  MODELS,
+  PaymentRequired,
   STATE_DIR,
   TankClient,
+  inputWeightBps,
+  pricePerBarrel,
+  registerOnChain,
+  signAssign,
+  type Offer,
   listWallets,
   loadWallet,
   network,
@@ -42,6 +67,7 @@ import {
   formatAmount,
   newKeyPair,
   parseAmount,
+  publicKeyOf,
   RECEIPT_LIMITS,
   type Check,
   type Receipt,
@@ -56,6 +82,8 @@ const { values: opts, positionals } = parseArgs({
     agent: { type: "string" },
     "refund-to": { type: "string" },
     to: { type: "string" },
+    key: { type: "string" },
+    private: { type: "boolean", default: false },
     json: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
   },
@@ -85,6 +113,40 @@ function wallet(): Wallet {
 
 function tankFile(contract: string, tankId: number): string {
   return join(STATE_DIR, "tanks", contract, `${tankId}.json`);
+}
+
+function keyFile(publicKey: string): string {
+  return join(STATE_DIR, "keys", `${publicKey}.json`);
+}
+
+/** The secret key of a tank: from its tank file, or from the key file of a tank its key owns. */
+async function tankSecret(barrel: Barrel, ref: string): Promise<{ tankId?: number; secret: string }> {
+  if (/^[0-9a-f]{64}$/.test(ref)) {
+    if (!existsSync(keyFile(ref))) throw new Error(`no secret for key ${ref} in ${join(STATE_DIR, "keys")}/`);
+    const tank = await barrel.tankForKey(ref);
+    return { tankId: tank?.id, secret: JSON.parse(readFileSync(keyFile(ref), "utf8")).secret_key };
+  }
+  const tankId = Number(ref);
+  return { tankId, secret: JSON.parse(readFileSync(tankFile(barrel.contractId, tankId), "utf8")).secret_key };
+}
+
+function saveTank(contract: string, tankId: number, secret: string): string {
+  const file = tankFile(contract, tankId);
+  mkdirSync(join(file, ".."), { recursive: true, mode: 0o700 });
+  writeFileSync(file, JSON.stringify({ tank_id: tankId, contract, secret_key: secret, public_key: publicKeyOf(secret) }, null, 2), { mode: 0o600 });
+  return file;
+}
+
+/** A key from --key (its secret must be on this machine), or a new one. */
+function useKey(): { publicKey: string; secretKey: string; created: boolean } {
+  if (opts.key) {
+    if (!existsSync(keyFile(opts.key))) throw new Error(`no secret for key ${opts.key}; make one with barrel key`);
+    return { publicKey: opts.key, secretKey: JSON.parse(readFileSync(keyFile(opts.key), "utf8")).secret_key, created: false };
+  }
+  const k = newKeyPair();
+  mkdirSync(join(STATE_DIR, "keys"), { recursive: true, mode: 0o700 });
+  writeFileSync(keyFile(k.publicKey), JSON.stringify({ public_key: k.publicKey, secret_key: k.secretKey }, null, 2), { mode: 0o600 });
+  return { ...k, created: true };
 }
 
 function need(value: string | undefined, usage: string): string {
@@ -268,15 +330,25 @@ async function buyFrom(chainName: string, seriesId: number, usdcText: string): P
   }
 }
 
-async function ask(tankId: number, question: string): Promise<boolean> {
+async function ask(ref: string, question: string): Promise<boolean> {
   const barrel = await connect();
-  const saved = JSON.parse(readFileSync(tankFile(barrel.contractId, tankId), "utf8")) as { secret_key: string };
-  const client = new TankClient({ barrel, tankId, tankSecretKey: saved.secret_key, pumpUrl: opts.pump });
-  // This model reasons before answering; "low" keeps short questions short.
-  const result = await client.chat({ messages: [{ role: "user", content: question }], max_tokens: 800, reasoning_effort: "low" });
+  const { tankId, secret } = await tankSecret(barrel, ref);
+  if (tankId === undefined) throw new Error(`key ${ref} owns no tank yet: barrel fund <series> <usdc> --key ${ref}`);
+  const client = new TankClient({ barrel, tankId, tankSecretKey: secret, pumpUrl: opts.pump, private: opts.private });
+  let result;
+  try {
+    // Reasoning models think before answering; "low" keeps short questions short.
+    result = await client.chat({ messages: [{ role: "user", content: question }], max_tokens: 800, reasoning_effort: "low" });
+  } catch (e) {
+    if (!(e instanceof PaymentRequired)) throw e;
+    say(`The tank cannot cover this request. The Pump offers:`);
+    for (const a of e.accepts) say(`  ${a.network}: send ${formatAmount(BigInt(a.maxAmountRequired))} ${a.asset === barrel.usdcId ? coin : a.asset} to ${a.payTo}${a.extra?.msg ? ` with msg ${a.extra.msg}` : ""}`);
+    return false;
+  }
   say(result.content.trim() || "(no visible answer: the token limit was spent on reasoning)");
   say();
   result.checks.forEach(mark);
+  if (result.sealedTo) say(`Private: the prompt and the answer crossed the Pump encrypted to model key ${result.sealedTo.slice(0, 16)}… and to this tank's key.`);
   say(`Paid ${result.units} units for ${result.usage.prompt_tokens} prompt + ${result.usage.completion_tokens} completion tokens.`);
   if (result.settleTx) say(`${chain.net.explorerTx}${result.settleTx}`);
   const dir = join(STATE_DIR, "receipts");
@@ -285,6 +357,233 @@ async function ask(tankId: number, question: string): Promise<boolean> {
   writeFileSync(file, `${JSON.stringify(result.receipt, null, 2)}\n`);
   say(`Receipt: ${file}`);
   return true;
+}
+
+// --- the model list and the price index -----------------------------------------
+
+async function models(): Promise<void> {
+  let barrel: Barrel | undefined;
+  try {
+    barrel = await connect();
+  } catch {}
+  const grades = barrel ? await barrel.grades() : [];
+  const series = barrel ? await barrel.seriesList() : [];
+  const now = Math.floor(Date.now() / 1000);
+  say(`Models NEAR AI Cloud serves from its own attested TEEs${barrel ? `, as offered on ${barrel.contractId}` : ""}:`);
+  for (const m of MODELS) {
+    const grade = grades.find((g) => g.model_id === m.model);
+    const open = series.filter((s) => s.grade_id === grade?.id && now < s.window_end);
+    say(`${m.model}${m.cheapest ? "  (cheapest)" : ""}`);
+    say(`  list price $${m.inputUsd} in / $${m.outputUsd} out per million tokens; input tokens count at ${inputWeightBps(m) / 100}% of a unit`);
+    if (!grade) {
+      say(`  not offered here (suggested price ${formatAmount(pricePerBarrel(m))} ${coin} per Barrel)`);
+      continue;
+    }
+    const live = (await barrel!.keys(grade.id)).filter((k) => now < k.expires_at).length;
+    const index = await barrel!.index(grade.id).catch(() => null);
+    for (const s of open) {
+      say(`  series ${s.id}: ${formatAmount(s.price_per_barrel)} ${coin} per Barrel${s.firm ? `, firm (bond ${formatAmount(s.firm.bond)} ${coin})` : ""}, until ${new Date(s.window_end * 1000).toISOString().slice(0, 10)}`);
+    }
+    say(`  ${live} live attested key(s)${index && index.deliveries ? `; index ${formatAmount(index.price_per_barrel)} ${coin} per Barrel over ${index.deliveries} proven deliveries in 24 h` : ""}`);
+  }
+}
+
+async function priceIndex(gradeId?: string): Promise<void> {
+  const barrel = await connect();
+  for (const g of (await barrel.grades()).filter((x) => !gradeId || x.id === gradeId)) {
+    const i = await barrel.index(g.id);
+    say(`${g.id} (${g.model_id}): ${i.deliveries ? `${formatAmount(i.price_per_barrel)} ${coin} per Barrel` : "no deliveries yet"}`);
+    say(`  ${i.deliveries} proven deliveries, ${i.units} units, ${formatAmount(i.usdc)} ${coin} over the last ${i.window_sec / 3600} h`);
+  }
+  say("The index only counts deliveries the contract verified: a model signature, then an ack, a claim or a forced answer.");
+}
+
+// --- key-owned tanks --------------------------------------------------------------
+
+async function key(): Promise<void> {
+  const k = useKey();
+  say(`Public key ${k.publicKey}`);
+  say(`Secret saved to ${keyFile(k.publicKey)} (git-ignored, mode 0600).`);
+  say("Anyone can fund a tank for this key; only the key can spend it:");
+  say(`  barrel fund <series> <usdc> --key ${k.publicKey}`);
+  say("Or send it to a Pump as x-barrel-key: the HTTP 402 answer says exactly how to pay.");
+}
+
+async function fund(seriesId: number, usdcText: string): Promise<void> {
+  const barrel = await connect();
+  const me = wallet();
+  const k = useKey();
+  const amount = parseAmount(usdcText);
+  const have = await barrel.usdcBalance(me.accountId).catch(() => 0n);
+  if (have < amount) {
+    if (net !== "testnet") throw new Error(`${me.accountId} holds ${formatAmount(have)} USDC, less than ${usdcText}`);
+    await barrel.faucet(me, me.accountId, amount);
+  }
+  const existed = (await barrel.tankForKey(k.publicKey)) !== null;
+  const out = await barrel.buyTank(me, seriesId, amount, k.publicKey);
+  if (out.failures.length) throw new Error(out.failures.join("; "));
+  const tank = (await barrel.tankForKey(k.publicKey))!;
+  saveTank(barrel.contractId, tank.id, k.secretKey);
+  say(`Tank ${tank.id} holds ${tank.balance} units, owned by key ${k.publicKey.slice(0, 16)}… (${existed ? "topped up" : "new tank"}; secret in ${keyFile(k.publicKey)}).`);
+  say(`No NEAR account is needed to use it: barrel ask ${k.publicKey} "<question>"`);
+  say(`${chain.net.explorerTx}${out.txHash}`);
+}
+
+async function fundFrom(chainName: string, seriesId: number, usdcText: string): Promise<void> {
+  if (net !== "mainnet") throw new Error("NEAR Intents runs on mainnet only; set BARREL_NETWORK=mainnet");
+  const refundTo = need(opts["refund-to"], "fund-from needs --refund-to <your address on the origin chain>");
+  const barrel = await connect();
+  const k = useKey();
+  const origin = (await usdcOrigins()).find((t) => t.blockchain === chainName);
+  if (!origin) throw new Error(`no USDC route from ${chainName}`);
+  const amount = parseAmount(usdcText);
+  const [series, config, escrow] = await Promise.all([barrel.series(seriesId), barrel.config(), barrel.totalEscrow()]);
+  if (!series) throw new Error(`unknown series ${seriesId}`);
+  if (amount > buyRoom(series, config, escrow)) throw new Error(`series ${seriesId} can take at most ${formatAmount(buyRoom(series, config, escrow))} USDC right now`);
+  const q = await quoteBuy({ originAsset: origin.assetId, amount, refundTo, contract: barrel.contractId, usdc: barrel.usdcId, seriesId, tankKey: k.publicKey, jwt: process.env.ONECLICK_JWT });
+  say(`Send exactly ${q.amountInFormatted} USDC on ${chainName} to ${q.depositAddress}`);
+  say(`The purchase lands in a tank owned by key ${k.publicKey} (secret in ${keyFile(k.publicKey)}).`);
+  say(`Unfinished by ${q.deadline}, the deposit is refunded to ${refundTo}. Then: barrel ask ${k.publicKey} "<question>"`);
+}
+
+async function assign(tankId: number, to: string): Promise<void> {
+  const barrel = await connect();
+  const { secret } = await tankSecret(barrel, String(tankId));
+  const out = await barrel.assign(wallet(), tankId, to, signAssign(barrel.contractId, tankId, to, secret));
+  if (out.failures.length) throw new Error(out.failures.join("; "));
+  say(`Tank ${tankId} now belongs to ${to}: it can unlock, withdraw or top it up. The key still spends it.`);
+  say(`${chain.net.explorerTx}${out.txHash}`);
+}
+
+// --- firm series --------------------------------------------------------------------
+
+async function force(tankId: number, question: string): Promise<void> {
+  const barrel = await connect();
+  const tank = await barrel.tank(tankId);
+  if (!tank) throw new Error(`no tank ${tankId}`);
+  const grade = (await barrel.grade((await barrel.series(tank.series_id))!.grade_id))!;
+  // Exactly these three fields, in this order: the contract hashes the bytes and the model signs them.
+  const body = JSON.stringify({ model: grade.model_id, messages: [{ role: "user", content: question }], max_tokens: 800 });
+  const out = await barrel.forceRequest(wallet(), tankId, body);
+  const f = (await barrel.forced(out.value))!;
+  say(`Forced request ${f.id} is on chain. The operator must answer by ${new Date(f.deadline * 1000).toISOString()}.`);
+  const series = (await barrel.series(tank.series_id))!;
+  const worth = (BigInt(f.reserved) * BigInt(series.price_per_barrel) + 999_999n) / 1_000_000n;
+  say(`If it does not: barrel slash ${f.id}. The ${f.reserved} reserved units return to the tank and ${formatAmount(worth)} ${coin} of the bond is paid to you.`);
+  say(`${chain.net.explorerTx}${out.txHash}`);
+}
+
+async function canary(seriesId: number): Promise<void> {
+  const barrel = await connect();
+  const s = await barrel.series(seriesId);
+  if (!s?.firm) throw new Error(`series ${seriesId} is not firm`);
+  const out = await barrel.canary(wallet(), seriesId, BigInt(s.firm.canary_fee));
+  const f = (await barrel.forced(out.value))!;
+  say(`Canary ${f.id} sent. The contract wrote the prompt from a random seed; the operator must answer by ${new Date(f.deadline * 1000).toISOString()}.`);
+  say(`Watch: barrel forced ${f.id}. Missed: barrel slash ${f.id} (it counts toward default).`);
+}
+
+async function showForced(id: number): Promise<void> {
+  const barrel = await connect();
+  const f = await barrel.forced(id);
+  if (!f) throw new Error(`no forced request ${id}`);
+  say(`${f.tank_id === null ? `Canary ${f.id}` : `Forced request ${f.id} on tank ${f.tank_id}`}, series ${f.series_id}: ${f.status}`);
+  say(`  asked ${new Date(f.created_at * 1000).toISOString()}, deadline ${new Date(f.deadline * 1000).toISOString()}, reserved ${f.reserved} units`);
+  if (f.status === "answered") {
+    const answer = JSON.parse(f.response!);
+    say(`  answered for ${f.units} units, signed by model key ${f.tee_key!.slice(0, 16)}…`);
+    say(`  ${String(answer.choices?.[0]?.message?.content ?? "").trim().slice(0, 500)}`);
+  }
+  if (opts.json) say(JSON.stringify(f, null, 2));
+}
+
+async function slash(id: number): Promise<void> {
+  const barrel = await connect();
+  const out = await barrel.slashForced(wallet(), id);
+  if (out.failures.length) throw new Error(out.failures.join("; "));
+  say(`Missed deadline recorded. ${formatAmount(out.value)} ${coin} of the bond paid out.`);
+  say(`${chain.net.explorerTx}${out.txHash}`);
+}
+
+async function register(gradeId: string): Promise<void> {
+  const barrel = await connect();
+  const config = await barrel.config();
+  if (!config.attestor) throw new Error(`${barrel.contractId} has no attestor contract; its owner registers keys`);
+  const attestor = new Attestor(chain, config.attestor);
+  say(`Attesting ${gradeId} on chain through ${config.attestor} (you pay gas; nobody's permission is needed)…`);
+  const r = await registerOnChain(attestor, barrel, wallet(), gradeId);
+  r.txs.forEach((tx, i) => say(`  machine ${i + 1}: verified on chain in ${r.gasTgas[i]!.toFixed(0)} TGas, ${chain.net.explorerTx}${tx}`));
+  for (const k of r.registered) say(`  key ${k.key} live until ${new Date(k.expires_at * 1000).toISOString()}`);
+}
+
+// --- resale inside NEAR Intents -------------------------------------------------------
+
+async function relayUrl(barrel: Barrel, seriesId?: number): Promise<string> {
+  if (opts.pump) return opts.pump.replace(/\/+$/, "");
+  const s = seriesId !== undefined ? await barrel.series(seriesId) : (await barrel.seriesList())[0];
+  if (!s?.endpoint) throw new Error("pass --pump <url>: the relay that carries offers");
+  return s.endpoint.replace(/\/+$/, "");
+}
+
+async function sell(seriesId: number, units: bigint, usdcText: string): Promise<void> {
+  if (net !== "mainnet") throw new Error("NEAR Intents runs on mainnet only; set BARREL_NETWORK=mainnet");
+  const barrel = await connect();
+  const me = wallet();
+  const ix = new Intents(chain, barrel);
+  const price = parseAmount(usdcText);
+  const inside = await ix.barrels(me.accountId, seriesId);
+  if (inside < units) {
+    await ix.depositBarrels(me, seriesId, units - inside);
+    say(`Deposited ${units - inside} units into NEAR Intents.`);
+  }
+  if (await ix.ensureKey(me)) say(`Registered ${me.publicKey} with NEAR Intents.`);
+  const offer = await ix.offer(me, seriesId, units, price);
+  const relay = await relayUrl(barrel, seriesId);
+  const res = await fetch(`${relay}/v1/offers`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(offer) });
+  if (!res.ok) throw new Error(`relay: HTTP ${res.status} ${await res.text()}`);
+  say(`Offer ${offer.id}: ${units} units of series ${seriesId} for ${usdcText} ${coin}, until ${offer.deadline}.`);
+  say("It settles only as signed: both sides move in one transaction or nothing moves. To cancel, withdraw: barrel unsell " + seriesId);
+}
+
+async function offers(seriesId?: number): Promise<void> {
+  const barrel = await connect();
+  const list = ((await (await fetch(`${await relayUrl(barrel, seriesId)}/v1/offers`)).json()) as { offers: Offer[] }).offers;
+  const shown = list.filter((o) => seriesId === undefined || o.series_id === seriesId);
+  if (!shown.length) say("No live offers.");
+  for (const o of shown) {
+    const perBarrel = (BigInt(o.price) * 1_000_000n) / BigInt(o.units);
+    say(`${o.id}  series ${o.series_id}: ${o.units} units for ${formatAmount(o.price)} ${coin} (${formatAmount(perBarrel)} per Barrel) from ${o.maker}, until ${o.deadline}`);
+  }
+}
+
+async function take(offerId: string): Promise<void> {
+  if (net !== "mainnet") throw new Error("NEAR Intents runs on mainnet only; set BARREL_NETWORK=mainnet");
+  const barrel = await connect();
+  const me = wallet();
+  const ix = new Intents(chain, barrel);
+  const list = ((await (await fetch(`${await relayUrl(barrel)}/v1/offers`)).json()) as { offers: Offer[] }).offers;
+  const offer = list.find((o) => o.id === offerId);
+  if (!offer) throw new Error(`no live offer ${offerId}`);
+  const price = BigInt(offer.price);
+  const inside = await ix.usdc(me.accountId);
+  if (inside < price) await ix.depositUsdc(me, price - inside);
+  if (await ix.ensureKey(me)) say(`Registered ${me.publicKey} with NEAR Intents.`);
+  const { received, outcome } = await ix.take(me, offer);
+  say(`Bought ${received} units of series ${offer.series_id} for ${formatAmount(price)} ${coin} (the Verifier kept ${BigInt(offer.units) - received} units as its fee).`);
+  say(`${chain.net.explorerTx}${outcome.txHash}`);
+  await ix.withdrawBarrels(me, offer.series_id, received);
+  say(`Withdrawn to ${me.accountId}: barrel fill ${offer.series_id} ${received} to put them in a tank.`);
+}
+
+async function unsell(seriesId: number): Promise<void> {
+  const barrel = await connect();
+  const me = wallet();
+  const ix = new Intents(chain, barrel);
+  const inside = await ix.barrels(me.accountId, seriesId);
+  const usdc = await ix.usdc(me.accountId);
+  if (inside > 0n) await ix.withdrawBarrels(me, seriesId, inside);
+  if (usdc > 0n) await ix.withdrawUsdc(me, usdc);
+  say(`Withdrew ${inside} units and ${formatAmount(usdc)} ${coin} from NEAR Intents. Any open offer can no longer settle.`);
 }
 
 async function main(): Promise<boolean> {
@@ -314,7 +613,52 @@ async function main(): Promise<boolean> {
       await fill(Number(need(rest[0], "fill <series> <units>")), BigInt(need(rest[1], "fill <series> <units>")));
       return true;
     case "ask":
-      return ask(Number(need(rest[0], 'ask <tank> "<question>"')), need(rest.slice(1).join(" "), 'ask <tank> "<question>"'));
+      return ask(need(rest[0], 'ask <tank|key> "<question>"'), need(rest.slice(1).join(" "), 'ask <tank|key> "<question>"'));
+    case "models":
+      await models();
+      return true;
+    case "index":
+      await priceIndex(rest[0]);
+      return true;
+    case "key":
+      await key();
+      return true;
+    case "fund":
+      await fund(Number(need(rest[0], "fund <series> <usdc>")), need(rest[1], "fund <series> <usdc>"));
+      return true;
+    case "fund-from":
+      await fundFrom(need(rest[0], "fund-from <chain> <series> <usdc>"), Number(need(rest[1], "fund-from <chain> <series> <usdc>")), need(rest[2], "fund-from <chain> <series> <usdc>"));
+      return true;
+    case "assign":
+      await assign(Number(need(rest[0], "assign <tank> <account>")), need(rest[1], "assign <tank> <account>"));
+      return true;
+    case "force":
+      await force(Number(need(rest[0], 'force <tank> "<question>"')), need(rest.slice(1).join(" "), 'force <tank> "<question>"'));
+      return true;
+    case "canary":
+      await canary(Number(need(rest[0], "canary <series>")));
+      return true;
+    case "forced":
+      await showForced(Number(need(rest[0], "forced <id>")));
+      return true;
+    case "slash":
+      await slash(Number(need(rest[0], "slash <id>")));
+      return true;
+    case "register":
+      await register(need(rest[0], "register <grade>"));
+      return true;
+    case "sell":
+      await sell(Number(need(rest[0], "sell <series> <units> <usdc>")), BigInt(need(rest[1], "sell <series> <units> <usdc>")), need(rest[2], "sell <series> <units> <usdc>"));
+      return true;
+    case "offers":
+      await offers(rest[0] !== undefined ? Number(rest[0]) : undefined);
+      return true;
+    case "take":
+      await take(need(rest[0], "take <offer id>"));
+      return true;
+    case "unsell":
+      await unsell(Number(need(rest[0], "unsell <series>")));
+      return true;
     case "unlock": {
       const barrel = await connect();
       const out = await barrel.requestUnlock(wallet(), Number(need(rest[0], "unlock <tank>")));
@@ -347,7 +691,9 @@ async function main(): Promise<boolean> {
     }
     default: {
       const text = readFileSync(new URL(import.meta.url), "utf8");
-      say(text.split("\n").filter((l) => l.startsWith("//")).slice(1, 17).map((l) => l.slice(3)).join("\n"));
+      // The usage text is the comment block at the top of this file.
+      const top = text.split("\n").slice(1);
+      say(top.slice(0, top.findIndex((l) => !l.startsWith("//"))).map((l) => l.slice(3)).join("\n"));
       return command === undefined || opts.help;
     }
   }

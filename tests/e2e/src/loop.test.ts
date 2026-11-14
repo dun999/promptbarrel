@@ -19,6 +19,7 @@ import {
   NETWORKS,
   REPO_ROOT,
   loadWallet,
+  nearForCode,
   settleItem,
   signAck,
   sleep,
@@ -149,22 +150,30 @@ test("deploy the contract and a test stablecoin to faucet-funded accounts", asyn
     ? loadWallet("testnet", process.env.BARREL_E2E_ROOT)
     : await chain.createFaucetAccount("barrel-e2e");
   usdcW = await chain.createSubAccount(root, `usdc-${tag}`, "2.1");
-  barrelW = await chain.createSubAccount(root, `barrel-${tag}`, "4.6");
-  op = await chain.createSubAccount(root, `op-${tag}`, "0.6");
-  buyer = await chain.createSubAccount(root, `buyer-${tag}`, "0.6");
-  x = await chain.createSubAccount(root, `x-${tag}`, "0.5");
+  barrelW = await chain.createSubAccount(root, `barrel-${tag}`, nearForCode(readFileSync(join(REPO_ROOT, "res/barrel.wasm"))));
+  op = await chain.createSubAccount(root, `op-${tag}`, "0.4");
+  buyer = await chain.createSubAccount(root, `buyer-${tag}`, "0.4");
+  x = await chain.createSubAccount(root, `x-${tag}`, "0.3");
   contractId = barrelW.accountId;
 
   await chain.deploy(usdcW, readFileSync(join(REPO_ROOT, "res/test_usdc.wasm")));
   await chain.call(usdcW, usdcW.accountId, "new", {});
   await chain.deploy(barrelW, readFileSync(join(REPO_ROOT, "res/barrel.wasm")));
   await chain.call(barrelW, contractId, "new", {
-    owner: root.accountId,
-    usdc: usdcW.accountId,
-    unlock_delay_sec: UNLOCK_DELAY,
-    settle_grace_sec: GRACE,
-    max_series_units: "3000000",
-    max_total_escrow: "10000000",
+    args: {
+      owner: root.accountId,
+      usdc: usdcW.accountId,
+      unlock_delay_sec: UNLOCK_DELAY,
+      settle_grace_sec: GRACE,
+      claim_window_sec: 10,
+      timelock_sec: 3600,
+      max_series_units: "3000000",
+      max_total_escrow: "10000000",
+      min_tank_buy_units: "1000",
+      attestor: null,
+      guardian: null,
+      owner_registers_keys: true,
+    },
   });
   barrel = new Barrel(chain, contractId, usdcW.accountId);
   t.diagnostic(`contract ${contractId}`);
@@ -188,7 +197,7 @@ test("only the owner registers grades and model keys", async () => {
     barrel.addGrade(root, { id: "sim", model_id: "sim/other", input_weight_bps: 1, key_ttl_sec: 60 }),
     /grade exists/,
   );
-  await rejected(barrel.addKey(x, "sim", stranger.publicKey, sha256Hex("x")), /owner only/);
+  await rejected(barrel.addKey(x, "sim", stranger.publicKey, sha256Hex("x")), /registered by the attestor contract/);
   await barrel.addKey(root, "sim", tee.publicKey, sha256Hex("simulated evidence"));
   await barrel.addKey(root, "ttl", tee.publicKey, sha256Hex("simulated evidence"));
   const keys = await barrel.keys("sim");
@@ -434,7 +443,7 @@ test("Barrels transfer like any NEP-245 token, and a failed transfer call comes 
 });
 
 test("pause stops new money and settlement, but nobody is locked in", async () => {
-  await rejected(barrel.pause(x), /owner only/);
+  await rejected(barrel.pause(x), /owner or guardian only/);
   await barrel.pause(root);
 
   const paused = await barrel.buy(buyer, seriesA, 1_000_000n);

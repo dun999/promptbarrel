@@ -169,6 +169,24 @@ export class Chain {
     return { value: value as T, txHash: raw.transaction?.hash ?? "", logs, failures, gasBurnt };
   }
 
+  /** A function call whose arguments are raw bytes (a contract upgrade sends its code this way). */
+  async callRaw(
+    wallet: Wallet,
+    contractId: string,
+    methodName: string,
+    args: Uint8Array,
+    opts: { gasTgas?: number; deposit?: bigint } = {},
+  ): Promise<{ txHash: string; logs: string[] }> {
+    const raw = await this.send(
+      wallet,
+      contractId,
+      [actions.functionCall(methodName, args, BigInt(opts.gasTgas ?? 30) * TGAS, opts.deposit ?? 0n)],
+      methodName,
+    );
+    const logs: string[] = (raw.receipts_outcome ?? []).flatMap((r: any) => r.outcome?.logs ?? []);
+    return { txHash: raw.transaction?.hash ?? "", logs };
+  }
+
   async nearBalance(accountId: string): Promise<bigint> {
     const state: any = await withNetworkRetry(() => new Account(accountId, this.provider).getState());
     return BigInt(state.balance?.total ?? state.amount ?? 0);

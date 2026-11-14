@@ -208,15 +208,22 @@ async function live() {
 /** The FAQ quotes the contract's own numbers. */
 function faq(s) {
   const fill = (k, v) => $$(`[data-faq="${k}"]`).forEach((el) => { el.textContent = v; });
-  const series = s.series[0];
+  // Quote the cheapest series on offer.
+  const series = [...s.series].sort((a, b) => Number(a.price_per_barrel) - Number(b.price_per_barrel))[0];
   const grade = series ? s.grades.find((g) => g.id === series.grade_id) : null;
   if (series) fill("price", usdc(series.price_per_barrel));
   if (grade) {
     fill("model", grade.model_id);
     fill("weight", `${grade.input_weight_bps / 100}%`);
   }
+  const models = new Set(s.series.map((x) => x.grade_id)).size;
+  fill("models-note", models > 1 ? `, the cheapest of ${models} models on offer, each in its own series` : "");
   const m = Math.round(Number(s.config.unlock_delay_sec) / 60);
   fill("unlock", `${m} minute${m === 1 ? "" : "s"}`);
+  // A contract with an attestor registers keys only after checking Intel's quote on chain.
+  if (s.config.attestor) {
+    $("#faq-limits").innerHTML = `<p>It does not identify the machine that served the answer. NVIDIA GPU evidence is not checked yet. Model keys are registered by an attestor contract that checks Intel's quote on chain, and anyone can repeat the checks with <code>barrel audit</code>. Ask privately and the operator relays only ciphertext, though it still sees token counts and timing; otherwise it sees prompts and answers in plaintext.</p>`;
+  }
 }
 
 // ── the comparison ─────────────────────────────────────────────────────────
