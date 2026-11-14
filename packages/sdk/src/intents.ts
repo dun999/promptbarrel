@@ -57,6 +57,9 @@ function unmatchedDeltas(sim: Simulation): Record<string, string> | null {
   return Array.isArray(d) ? Object.fromEntries(d) : d;
 }
 
+/** The most a taker pays over the signed price to cover the Verifier's fee on the maker's USDC: 10 pips, at least 1 unit. */
+export const feeSlack = (price: bigint) => price / 100_000n + 1n;
+
 export const barrelToken = (contract: string, seriesId: number) => `nep245:${contract}:${seriesId}`;
 export const usdcToken = (usdc: string) => `nep141:${usdc}`;
 
@@ -189,10 +192,10 @@ export class Intents {
 
   /**
    * The mirror image of an offer: "I give the USDC and get the Barrels".
-   * `receive` lowers the units taken, which is how the Verifier's fee is left
-   * out (see `take`).
+   * `receive` lowers the units taken and `pay` raises the USDC given, which is
+   * how the Verifier's fee on each received side is covered (see `take`).
    */
-  async mirror(taker: Wallet, offer: Offer, receive?: bigint): Promise<SignedIntents> {
+  async mirror(taker: Wallet, offer: Offer, receive?: bigint, pay?: bigint): Promise<SignedIntents> {
     if (offer.contract !== this.barrel.contractId || offer.usdc !== this.barrel.usdcId) throw new Error("the offer is for another contract");
     // Never trust the relay's summary: the terms are whatever the maker signed.
     const signedTerms = JSON.parse(offer.signed.payload.message) as { signer_id: string; intents: { intent: string; diff?: Record<string, string> }[] };
@@ -202,7 +205,7 @@ export class Intents {
     if (Object.keys(diff).length !== 2 || diff[barrels] !== `-${offer.units}` || diff[usdc] !== offer.price || signedTerms.signer_id !== offer.maker) {
       throw new Error("the signed offer does not say what the relay says it does");
     }
-    return signIntents(taker, [{ intent: "token_diff", diff: { [barrels]: (receive ?? BigInt(offer.units)).toString(), [usdc]: `-${offer.price}` } }], {
+    return signIntents(taker, [{ intent: "token_diff", diff: { [barrels]: (receive ?? BigInt(offer.units)).toString(), [usdc]: `-${pay ?? BigInt(offer.price)}` } }], {
       salt: await this.salt(),
       deadlineMs: Date.now() + 10 * 60_000,
       verifier: this.verifier,
@@ -218,14 +221,18 @@ export class Intents {
    * USDC inside Intents (`depositUsdc`).
    *
    * The Verifier keeps a small fee out of what each side receives, so the
-   * two diffs only net to zero once the fee is left out. The simulation
-   * reports exactly what is unmatched; the mirror is signed again without it.
-   * Nothing moves before the simulation passes.
+   * two diffs only net to zero once the fee is covered. The simulation
+   * reports exactly what is unmatched: the taker receives that many fewer
+   * Barrels, and covers the fee on the maker's USDC by paying that much more
+   * (never more than `feeSlack` over the signed price). Nothing moves before
+   * the simulation passes.
    */
   async take(taker: Wallet, offer: Offer): Promise<{ received: bigint; outcome: CallOutcome<unknown> }> {
     const barrels = barrelToken(offer.contract, offer.series_id);
+    const usdc = usdcToken(offer.usdc);
     let receive = BigInt(offer.units);
-    let mine = await this.mirror(taker, offer, receive);
+    let pay = BigInt(offer.price);
+    let mine = await this.mirror(taker, offer, receive, pay);
     for (let attempt = 0; attempt < 3; attempt++) {
       const sim = await this.simulate([offer.signed, mine]);
       const unmatched = unmatchedDeltas(sim);
@@ -235,19 +242,21 @@ export class Intents {
         return { received: receive, outcome };
       }
       const keys = Object.keys(unmatched);
-      if (keys.some((k) => k !== barrels)) throw new Error(`the trade does not balance: ${JSON.stringify(unmatched)}`);
+      if (keys.some((k) => k !== barrels && k !== usdc)) throw new Error(`the trade does not balance: ${JSON.stringify(unmatched)}`);
       // The unmatched delta is what the two diffs sum to once the fee is
       // counted: positive means more would be received than was given.
-      receive -= BigInt(unmatched[barrels]!);
+      receive -= BigInt(unmatched[barrels] ?? "0");
+      pay += BigInt(unmatched[usdc] ?? "0");
       if (receive <= 0n) throw new Error("the fee is larger than the trade");
-      mine = await this.mirror(taker, offer, receive);
+      if (pay - BigInt(offer.price) > feeSlack(BigInt(offer.price))) throw new Error(`the Verifier wants ${pay - BigInt(offer.price)} more USDC units than a fee`);
+      mine = await this.mirror(taker, offer, receive, pay);
     }
     throw new Error("could not balance the trade against the Verifier's fee");
   }
 
   /** Settles both sides atomically. Anyone can send it. */
   execute = (anyone: Wallet, signed: SignedIntents[]): Promise<CallOutcome<unknown>> =>
-    this.chain.call(anyone, this.verifier, "execute_intents", { signed }, { gasTgas: 300 });
+    this.chain.call(anyone, this.verifier, "execute_intents", { signed }, { gasTgas: 100 });
 
   /** Moves Barrels from the Intents balance back to a NEAR account. */
   withdrawBarrels = (wallet: Wallet, seriesId: number, units: bigint, to = wallet.accountId) =>

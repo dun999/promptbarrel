@@ -45,6 +45,7 @@ import {
   Barrel,
   Chain,
   Intents,
+  feeSlack,
   MODELS,
   PaymentRequired,
   STATE_DIR,
@@ -568,7 +569,12 @@ async function take(offerId: string): Promise<void> {
   if (!offer) throw new Error(`no live offer ${offerId}`);
   const price = BigInt(offer.price);
   const inside = await ix.usdc(me.accountId);
-  if (inside < price) await ix.depositUsdc(me, price - inside);
+  const need = price + feeSlack(price); // the price, plus room to cover the Verifier's fee on the seller's USDC
+  if (inside < need) {
+    await ix.depositUsdc(me, need - inside);
+    // The deposit is credited a block or two after the call returns; wait for it before simulating.
+    for (let i = 0; i < 20 && (await ix.usdc(me.accountId)) < need; i++) await new Promise((r) => setTimeout(r, 1000));
+  }
   if (await ix.ensureKey(me)) say(`Registered ${me.publicKey} with NEAR Intents.`);
   const { received, outcome } = await ix.take(me, offer);
   say(`Bought ${received} units of series ${offer.series_id} for ${formatAmount(price)} ${coin} (the Verifier kept ${BigInt(offer.units) - received} units as its fee).`);
