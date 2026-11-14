@@ -153,7 +153,7 @@ x402 funds a tank rather than paying per request on purpose: an x402 payment set
 
 ### Resale *(mainnet, NEAR Intents)*
 
-Barrels are NEP-245 tokens, so they trade inside `intents.near` with no exchange contract of Barrel's own. The seller deposits Barrels and signs one NEP-413 `token_diff` intent; the buyer signs the mirror image; anyone submits both, and both sides move in one transaction or nothing moves. `take` runs the free `simulate_intents` view first and leaves the Verifier's fee (1 pip today) out of what it asks for. The Pump's `/v1/offers` only relays signed offers; the buyer checks the signed terms. NEAR Intents does not run on testnet, so this is tested against mainnet's `simulate_intents` (signatures, nonces, fees) but no real trade has been made yet.
+Barrels are NEP-245 tokens, so they trade inside `intents.near` with no exchange contract of Barrel's own. The seller deposits Barrels and signs one NEP-413 `token_diff` intent; the buyer signs the mirror image; anyone submits both, and both sides move in one transaction or nothing moves. `take` runs the free `simulate_intents` view first and leaves the Verifier's fee (1 pip today) out of what it asks for. The Pump's `/v1/offers` only relays signed offers; the buyer checks the signed terms. NEAR Intents does not run on testnet, so this is tested on mainnet: the first resale settled in [`8gnEaAs4…`](https://nearblocks.io/txns/8gnEaAs4UCkTQCQXMHKDAbp7RgSfLEuC1NTH5W2xxsf7), 9,999 units of series 3 for 0.012001 USDC (the taker covers the Verifier's fee of one base unit on each received side).
 
 ```bash
 pnpm barrel sell 1 500000 0.25 --account seller.near   # 0.5 Barrels for 0.25 USDC
