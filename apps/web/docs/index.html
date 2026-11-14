@@ -232,8 +232,8 @@ pnpm barrel take &lt;offer id&gt; --account buyer.near
 pnpm barrel unsell 1 --account seller.near</pre></div>
       <ul class="ticks">
         <li>An offer is a signed NEP-413 message with a <code>token_diff</code> intent, a nonce from the Verifier's salt and a deadline. The Pump's <code>/v1/offers</code> relay only carries offers; the buyer checks the signed terms, never the relay's summary.</li>
-        <li>The Verifier keeps a small fee of what each side receives (1 pip on mainnet today). <code>take</code> runs the free <code>simulate_intents</code> view first and leaves the fee out of the units it asks for, so nothing moves until the trade balances.</li>
-        <li>Mainnet only: NEAR Intents does not run on testnet.</li>
+        <li>The Verifier keeps a small fee of what each side receives (1 pip on mainnet today). <code>take</code> runs the free <code>simulate_intents</code> view first, takes that many fewer Barrels and pays that much more USDC to cover the fee on the seller's side (one base unit each on small trades), so nothing moves until the trade balances.</li>
+        <li>Mainnet only: NEAR Intents does not run on testnet. The first resale settled in <a class="link" href="https://nearblocks.io/txns/8gnEaAs4UCkTQCQXMHKDAbp7RgSfLEuC1NTH5W2xxsf7" target="_blank" rel="noopener"><code>8gnEaAs4…</code></a>: 9,999 units of series 3 for 0.012001 USDC.</li>
       </ul>
     </section>
 
