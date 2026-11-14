@@ -4,7 +4,7 @@
 
 You prepay for inference from a named model. The money sits in a NEAR contract. The operator is paid per answer, and only when the model's own TEE has signed that answer under a key registered after an Intel TDX attestation check. Whatever you do not use is refunded when the series expires.
 
-Built for the NEAR hackathon (tracks: `agents`, `security`). Live on NEAR mainnet with Circle's USDC at [promptbarrel.com](https://promptbarrel.com). Inference comes from [NEAR AI Cloud](https://cloud.near.ai). The full documentation is the site's `/docs` page (`apps/web/docs/`).
+Built for the NEAR hackathon (tracks: `agents`, `security`, `privacy`, `defi`). Live on NEAR mainnet with Circle's USDC at [promptbarrel.com](https://promptbarrel.com). Inference comes from [NEAR AI Cloud](https://cloud.near.ai). The full documentation is the site's `/docs` page (`apps/web/docs/`).
 
 > **Mainnet runs the current code** at `barrel-v2.promptbarrel.near`: five models, on-chain attestation, private prompts, key-owned tanks with HTTP 402 funding, claims, the price index and timelocked changes. Firm series are built and tested on testnet; the mainnet series start without a bond.
 
