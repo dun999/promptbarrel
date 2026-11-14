@@ -2,7 +2,7 @@
 // the connected wallet signs (near.bundle.js). Tank spend keys are made and
 // kept in this browser. No backend of ours sits between you and the contract.
 
-import { $, $$, EXPLORER, deployment, loadDeployment, loadSamples, readState, escrowParts, liveKey, view, usdc, int, barrels, short, utc, ago, span, pct, tween, checkReceipt, readReceipt, tamper, escapeHtml, copyText, icon } from "./chain.js";
+import { $, $$, EXPLORER, deployment, loadDeployment, loadSamples, readState, fullAccessKeys, escrowParts, liveKey, view, usdc, int, barrels, short, utc, ago, span, pct, tween, checkReceipt, readReceipt, tamper, escapeHtml, copyText, icon } from "./chain.js";
 
 const ROOT = "../";
 const ic = (id, cls = "icon") => icon(id, cls, ROOT);
@@ -23,6 +23,8 @@ let near = null; // wallet + tank code, loaded after first paint
 let selected = null; // series id to buy and fill from
 let lastSync = 0;
 let first = true;
+/** Full-access keys on the contract account, read once per page load. */
+let fullKeysRead = null;
 const seen = new Set();
 const shown = {};
 
@@ -903,10 +905,24 @@ function renderNetwork(s) {
   if (c.attestor && !c.owner_registers_keys) {
     $("#limit-key").innerHTML = `<h3 class="h4">Who registered the key</h3><p class="label">Only the attestor contract can: it checks Intel's quote, the nonce and the measured software on chain before any key counts. Anyone can run it; the owner cannot add keys.</p>`;
   }
-  const changes = c.timelock_sec ? `Owner, attestor and code changes are announced on chain and wait ${span(c.timelock_sec)} before they apply.` : "The contract is upgradeable by its owner key.";
-  $("#limit-money").innerHTML = testnet()
-    ? `<h3 class="h4">Testnet money</h3><p class="label">This build reads the testnet development deployment. tUSDC is a test token with no value. ${changes}</p>`
-    : `<h3 class="h4">Real money, low caps</h3><p class="label">This is mainnet USDC. The contract caps how much it holds. ${changes}</p>`;
+  const money = (changes) => {
+    $("#limit-money").innerHTML = testnet()
+      ? `<h3 class="h4">Testnet money</h3><p class="label">This build reads the testnet development deployment. tUSDC is a test token with no value. ${changes}</p>`
+      : `<h3 class="h4">Real money, low caps</h3><p class="label">This is mainnet USDC. The contract caps how much it holds. ${changes}</p>`;
+  };
+  if (!c.timelock_sec) money("The contract is upgradeable by its owner key.");
+  else {
+    const timelock = `Owner, attestor and code changes are announced on chain and wait ${span(c.timelock_sec)} before they apply`;
+    money(`${timelock}.`);
+    // The timelock binds only if no full-access key can replace the code directly.
+    fullKeysRead ??= fullAccessKeys().catch(() => null);
+    fullKeysRead.then((n) => {
+      if (n === null) return;
+      money(n === 0
+        ? `${timelock}, and the contract account has no full-access key that could skip it.`
+        : `${timelock}. The deploy key still has full access to the contract account and could skip that until it is removed.`);
+    });
+  }
   first = false;
 }
 

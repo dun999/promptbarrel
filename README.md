@@ -6,7 +6,7 @@ You prepay for inference from a named model. The money sits in a NEAR contract. 
 
 Built for the NEAR hackathon (tracks: `agents`, `security`). Live on NEAR mainnet with Circle's USDC at [promptbarrel.com](https://promptbarrel.com). Inference comes from [NEAR AI Cloud](https://cloud.near.ai). The full documentation is the site's `/docs` page (`apps/web/docs/`).
 
-> **Mainnet runs the first contract (v1); this code is ahead of it.** Everything v1 does (one model, paid on proof, job tanks, refunds, buying from other chains) is live on mainnet. Everything newer (five models, on-chain attestation, private prompts, key-owned tanks and HTTP 402 funding, claims, firm series, the price index, timelocked changes, resale) is built and tested against the testnet deployment and reaches mainnet with the next deployment.
+> **Mainnet runs the current code** at `barrel-v2.promptbarrel.near`: five models, on-chain attestation, private prompts, key-owned tanks with HTTP 402 funding, claims, the price index and timelocked changes. Firm series are built and tested on testnet; the mainnet series start without a bond.
 
 ## The problem
 
@@ -59,7 +59,7 @@ request_unlock(tank)              or: client rejects          the leftover comes
 
 ## Use it
 
-The tools use mainnet with real USDC, under low caps, unless `BARREL_NETWORK=testnet`. Until mainnet is redeployed, the features marked *(testnet)* below need `BARREL_NETWORK=testnet`. Every write is a transaction that you sign with your own NEAR wallet or that your agent signs with its tank key; nothing is recorded or replayed.
+The tools use mainnet with real USDC, under low caps, unless `BARREL_NETWORK=testnet`. Every write is a transaction that you sign with your own NEAR wallet or that your agent signs with its tank key; nothing is recorded or replayed.
 
 ### In the browser
 
@@ -74,13 +74,13 @@ In `/app/`:
 1. **Connect** a NEAR mainnet wallet: MyNearWallet, HOT or Intear.
 2. **Buy.** Pick a model's series and pay USDC on NEAR for its Barrels, or pay USDC on another chain through NEAR Intents (below). The USDC goes into the contract's escrow.
 3. **Fill a tank.** Your browser makes a fresh Ed25519 spend key and keeps it in local storage. Your wallet signs `fill` with the key's public half and a 0.01 NEAR storage deposit.
-4. **Ask.** The browser signs the request with the tank key and sends it to the series' Pump; tick **Private** to encrypt it to the model *(testnet)*. When the answer comes back, it checks the model's signature in the browser and with the contract's `verify_receipt` view. Only then does it sign the ack. The Pump settles on-chain, and the app links the settlement transaction. If a check fails, nothing is acked and nothing is paid.
+4. **Ask.** The browser signs the request with the tank key and sends it to the series' Pump; tick **Private** to encrypt it to the model. When the answer comes back, it checks the model's signature in the browser and with the contract's `verify_receipt` view. Only then does it sign the ack. The Pump settles on-chain, and the app links the settlement transaction. If a check fails, nothing is acked and nothing is paid.
 5. **Give the tank to an agent.** The app shows the MCP command with the network, tank id and key filled in, and offers the key as a file.
 6. **Take the rest back.** Unlock a tank, then withdraw after the unlock delay. After a series closes, refund unused Barrels for their USDC.
 
 `/app/` also shows the escrow split per series, every settled answer, the registered model keys and their time to live, a receipt verifier and the contract config. The landing page `/` reads the contract live and walks through how a payment is proven. `/docs/` documents the whole product and re-reads its numbers from the contract. All pages read the chain from your browser through a public RPC; there is no Barrel backend between you and the contract.
 
-**Who can ask.** A browser can reach a Pump only over HTTPS, or on its own machine. Mainnet series 1 was opened with the endpoint `http://127.0.0.1:8787`, which only the operator's own machine can reach. For anyone else to ask, the operator serves the Pump at a public HTTPS address (`PUMP_HOST`, `PUMP_PORT`, behind TLS) and moves the series there with the contract's `set_series_endpoint`, signed by the operator (`Barrel.setSeriesEndpoint` in `packages/sdk`). Payment rules do not change with the address. The app marks a series whose Pump it cannot reach before you buy, and `/docs/` shows where each series points right now.
+**Who can ask.** A browser can reach a Pump only over HTTPS, or on its own machine. The mainnet series were opened with the endpoint `http://127.0.0.1:8787`, which only the operator's own machine can reach. For anyone else to ask, the operator serves the Pump at a public HTTPS address (`PUMP_HOST`, `PUMP_PORT`, behind TLS) and moves the series there with the contract's `set_series_endpoint`, signed by the operator (`Barrel.setSeriesEndpoint` in `packages/sdk`). Payment rules do not change with the address. The app marks a series whose Pump it cannot reach before you buy, and `/docs/` shows where each series points right now.
 
 ### From the command line
 
@@ -94,12 +94,12 @@ pnpm barrel verify fixtures/gateway-kind.json                          # → REJ
 # Attest a model yourself: Intel DCAP, report-data binding, RTMR3 replay.
 pnpm barrel attest z-ai/glm-5.3-flash                                  # → ATTESTED
 pnpm barrel audit                                                      # registered keys vs. a fresh attestation
-pnpm barrel register glm-5.3-flash                                     # register its key on chain, as anyone (testnet)
+pnpm barrel register glm-5.3-flash                                     # register its key on chain, as anyone
 
 # State of the deployment.
 pnpm barrel status
 pnpm barrel models                                                     # every model, its series and price
-pnpm barrel index glm-5.3-flash                                        # 24-hour price from proven deliveries (testnet)
+pnpm barrel index glm-5.3-flash                                        # 24-hour price from proven deliveries
 
 # Tests.
 pnpm test        # verifier (9) + Rust rules (6) + on-chain attestation checks against real reports (2), offline
@@ -111,7 +111,7 @@ pnpm e2e         # 36 tests on NEAR testnet: full loop, every attack, refunds, t
 With a tank filled in the app, use the command it shows:
 
 ```bash
-claude mcp add barrel -e BARREL_NETWORK=mainnet -e BARREL_CONTRACT=barrel-v1.promptbarrel.near \
+claude mcp add barrel -e BARREL_NETWORK=mainnet -e BARREL_CONTRACT=barrel-v2.promptbarrel.near \
   -e BARREL_TANK=<tank id> -e BARREL_TANK_KEY=<spend key> -- node "$PWD/apps/mcp/bin/barrel-mcp.mjs"
 ```
 
@@ -123,9 +123,9 @@ pnpm barrel fill 1 500000 --account you.near        # tank with a fresh spend ke
 claude mcp add barrel -e BARREL_TANK=<tank id> -- node "$PWD/apps/mcp/bin/barrel-mcp.mjs"
 ```
 
-Tools: `barrel_ask`, `barrel_balance`, `barrel_models`, `barrel_verify`. On a job tank `barrel_balance` also tells the agent what the leftover will pay it. The agent holds only the tank's spend key. It cannot transfer, withdraw or refund. `barrel_ask` needs the series' Pump to be running and reachable. `BARREL_PRIVATE=1` encrypts every question to the model *(testnet)*.
+Tools: `barrel_ask`, `barrel_balance`, `barrel_models`, `barrel_verify`. On a job tank `barrel_balance` also tells the agent what the leftover will pay it. The agent holds only the tank's spend key. It cannot transfer, withdraw or refund. `barrel_ask` needs the series' Pump to be running and reachable. `BARREL_PRIVATE=1` encrypts every question to the model.
 
-An agent can also start with nothing but a key *(testnet)*: leave out `BARREL_TANK`, and until someone funds the key, `barrel_balance` tells the agent how anyone can (below).
+An agent can also start with nothing but a key: leave out `BARREL_TANK`, and until someone funds the key, `barrel_balance` tells the agent how anyone can (below).
 
 ```bash
 pnpm barrel key                                     # a new tank key → .barrel/keys/<public key>.json
@@ -145,7 +145,7 @@ pnpm barrel fund-from base 1 1.0 --refund-to 0xYourBaseAddress                  
 
 Quotes are kept under the series' room and the global escrow cap, because a delivery the contract refuses would go back to NEAR Intents rather than to the buyer. Without `ONECLICK_JWT` 1Click adds a 0.25% fee.
 
-### HTTP 402 and x402 *(testnet)*
+### HTTP 402 and x402
 
 An agent sends its request with only `x-barrel-key: <public key>`. If the key owns no funded tank, the Pump answers `402 Payment Required` with an x402 body (`x402Version: 1`, `accepts: [{scheme: "exact", network: "near-mainnet", asset: <USDC>, payTo: <Barrel contract>, maxAmountRequired, extra: {method: "ft_transfer_call", msg: "{\"series_id\":1,\"tank_key\":\"…\"}"}}]`). Paying it puts the purchase into a tank only that key can spend, in the contract's escrow, never with the operator. On mainnet, `x-barrel-pay-from: <chain>` and `x-barrel-refund-to: <address>` add a 1Click deposit address on that chain for the same purchase. `GET /v1/tank?key=` then returns the tank, and `TankClient` with no tank id does all of this and throws `PaymentRequired` with the offers.
 
@@ -161,7 +161,7 @@ pnpm barrel offers 1
 pnpm barrel take <offer id> --account buyer.near
 ```
 
-### Firm series *(testnet)*
+### Firm series
 
 ```bash
 pnpm barrel force <tank> "question"     # tank owner: a request the operator must answer on chain before its deadline
@@ -169,21 +169,22 @@ pnpm barrel canary 2                    # anyone: ask the operator to prove it i
 pnpm barrel slash <id>                  # after a missed deadline: the bond pays the tank owner, and it counts as a miss
 ```
 
-The Pump answers forced requests and canaries on its own. The contract hashes the posted answer, checks the model's signature and reads the token counts out of the signed bytes.
+The Pump answers forced requests and canaries on its own. The contract hashes the posted answer, checks the model's signature and reads the token counts out of the signed bytes. Tested on testnet; the mainnet series were opened without a bond (`pnpm deploy:mainnet --firm-bond <USDC>` makes them firm).
 
-## Mainnet deployment (v1)
+## Mainnet deployment
 
 | | |
 | --- | --- |
-| Contract | [`barrel-v1.promptbarrel.near`](https://nearblocks.io/address/barrel-v1.promptbarrel.near), owner `promptbarrel.near`, operator `op-v1.promptbarrel.near` |
+| Contract | [`barrel-v2.promptbarrel.near`](https://nearblocks.io/address/barrel-v2.promptbarrel.near), owner `promptbarrel.near`, operator `op-v2.promptbarrel.near` |
+| Attestor | [`attestor-v2.promptbarrel.near`](https://nearblocks.io/address/attestor-v2.promptbarrel.near): the only way a model key gets registered; the owner cannot |
 | Stablecoin | Circle's USDC on NEAR (`17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1`) |
-| Grade | `glm-5.3-flash` → `z-ai/glm-5.3-flash`, input tokens weighted 16%, model key time to live 24 hours |
-| Series 1 | 0.60 USDC per Barrel, open until 2026-12-31 00:00 UTC, Pump endpoint `http://127.0.0.1:8787` until the operator moves it |
+| Series 1–5 | GLM 5.3 Flash 0.60, Qwen3 VL 30B 0.66, Qwen3.6 35B 1.32, DeepSeek V4.1 Flash 1.44, Qwen3.8 27B 1.62 USDC per Barrel; open until 2026-12-31 00:00 UTC; Pump endpoint `http://127.0.0.1:8787` until the operator moves it |
+| Model keys | Registered on chain through the attestor, time to live 24 hours; a running Pump re-registers a rotated key, and anyone can with `barrel register` |
 | Caps | 50 USDC of escrow in total, 100 Barrels per series, while this is new |
-| Delays | unlock 10 minutes, settle grace 1 hour |
-| Evidence for the registered key | `deployments/evidence/0d62ea7e….json` (report, nonce, Intel collateral) |
+| Delays | unlock 10 minutes, claim window 5 minutes, settle grace 1 hour, changes 24 hours |
+| Evidence | `deployments/evidence/`, one file per model named in `deployments/mainnet.json` (report, nonce, Intel collateral) |
 
-Recorded in `deployments/mainnet.json`, including the WASM SHA-256. The operator moves its Pump with `set_series_endpoint`; payment rules do not change with the address. The next deployment replaces it with the current contract and its attestor: one series per attested model, a 24-hour timelock on changes, and the owner unable to register keys.
+Recorded in `deployments/mainnet.json`, including the WASM SHA-256. The operator moves its Pump with `set_series_endpoint`; payment rules do not change with the address. The first mainnet contract (`barrel-v1`, one model, keys registered by the owner) held no user money and was removed to pay for this one; its record is `deployments/mainnet-v1.json`.
 
 ## Testnet, for development
 
@@ -247,19 +248,19 @@ An answer that is never acknowledged can be claimed by the operator with the pay
 ## What a receipt does not prove
 
 - It proves a TEE holding the model's signing key signed these exact bytes. It does not identify the serving machine.
-- With an attestor, the chain checked Intel's quote before the key counted, against compose hashes someone reviewed. The compose hash names NEAR AI Cloud's serving software, which is shared by several models; what binds the model is the signed text, whose model id the contract takes from the grade. On mainnet v1, keys are still registered by Barrel's registrar after off-chain checks, with the evidence published; anyone can repeat them with `barrel attest` and `barrel audit`.
+- With an attestor, the chain checked Intel's quote before the key counted, against compose hashes someone reviewed. The compose hash names NEAR AI Cloud's serving software, which is shared by several models; what binds the model is the signed text, whose model id the contract takes from the grade. Anyone can repeat the checks off chain with `barrel attest` and `barrel audit`.
 - NVIDIA GPU evidence is not checked yet. TEE guarantees rest on Intel TDX and NVIDIA confidential-computing assumptions. Intel's collateral comes from Intel's own Provisioning Certification Service.
-- Asked privately, the Pump relays ciphertext but still sees token counts, timing and which tank asked. Otherwise (and always on mainnet v1) it sees prompts and answers in plaintext.
+- Asked privately, the Pump relays ciphertext but still sees token counts, timing and which tank asked. Otherwise it sees prompts and answers in plaintext.
 - Streamed answers are signed by the gateway, not the model, so the Pump refuses streaming.
 - An operator can refuse to serve: the money is safe. On a plain series the refund waits for expiry; on a firm series every unanswered forced request is paid from the bond and a default opens refunds at once.
-- Mainnet runs with low caps (50 USDC of escrow). On v1 the owner key can upgrade the contract at once; the current contract makes every code and owner change wait out a public timelock.
+- Mainnet runs with low caps (50 USDC of escrow). Code, owner and attestor changes go through a public 24-hour timelock in the contract (`propose`, then `apply` or `upgrade`). The deploy key still has full access to the contract account, which can bypass that, until it is removed.
 
 ## Roadmap
 
 1. **Proof** (live on mainnet): the loop above, one operator, one model, job tanks, refunds.
-2. **Reach** (built, on testnet): pay from any chain via NEAR Intents 1Click (in the mainnet app and CLI today); key-owned tanks funded through HTTP 402 x402 offers; resale inside `intents.near`; claims for unacknowledged answers.
-3. **Trustless** (built, on testnet): on-chain attestation so anyone can register a key; prompts encrypted to the model; timelocked changes and upgrades.
-4. **Market** (built, on testnet): every NEAR-attested model as its own series; firm series with operator bonds, forced requests and canaries; a settlement price index. A second inference supplier is not in scope: it would need another provider's API.
+2. **Reach** (live on mainnet): pay from any chain via NEAR Intents 1Click; key-owned tanks funded through HTTP 402 x402 offers; resale inside `intents.near`; claims for unacknowledged answers.
+3. **Trustless** (live on mainnet): on-chain attestation so anyone can register a key; prompts encrypted to the model; timelocked changes and upgrades.
+4. **Market** (live on mainnet, firm series tested on testnet): every NEAR-attested model as its own series; firm series with operator bonds, forced requests and canaries; a settlement price index. A second inference supplier is not in scope: it would need another provider's API.
 
 Details in the docs, under [Roadmap](apps/web/docs/index.html#roadmap) (served at `/docs/#roadmap`).
 

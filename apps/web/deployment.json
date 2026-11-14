@@ -1,23 +1,78 @@
 {
   "network": "mainnet",
   "rpc": "https://free.rpc.fastnear.com",
-  "contract": "barrel-v1.promptbarrel.near",
+  "contract": "barrel-v2.promptbarrel.near",
+  "attestor": "attestor-v2.promptbarrel.near",
   "usdc": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
   "owner": "promptbarrel.near",
-  "operator": "op-v1.promptbarrel.near",
-  "wasm_sha256": "cb64709a83f94dcd6d30aec38051eb771dba16bbd9668e77f09b78ecbb0a4aa6",
-  "deployed_at": "2026-11-13T13:07:42.165Z",
+  "operator": "op-v2.promptbarrel.near",
+  "wasm_sha256": "e00f107b125b378c859379f41c17dcdd213bdd871d3c8d505d9ae259af0acf6d",
+  "deployed_at": "2026-11-14T09:40:18.243Z",
   "config": {
     "unlock_delay_sec": 600,
-    "settle_grace_sec": 3600
+    "settle_grace_sec": 3600,
+    "claim_window_sec": 300,
+    "timelock_sec": 86400,
+    "min_tank_buy_units": "10000"
   },
   "grades": [
     {
       "id": "glm-5.3-flash",
       "model_id": "z-ai/glm-5.3-flash",
+      "label": "GLM 5.3 Flash",
       "input_weight_bps": 1600,
       "key_ttl_sec": 86400,
-      "evidence": "deployments/evidence/0d62ea7eb1d95111fea32c62709ca6137d0c6db55fc46eb196f6a049d6865234.json"
+      "compose_hashes": [
+        "c900dc7304663b73b623cd5d941fbdab6f02858017b371ae28de445a16d2e2d0",
+        "e8416a02d6f7ce47baaa52e3925b934fd30834b04fc9086b363db9b1d12c729d",
+        "a7de0bba194b6466c5c7b8dcfb907b6b60404ab2ba6de8b5d0cf63c2145d6868"
+      ],
+      "evidence": "deployments/evidence/0ff58318a1a22378bd6268b115a9edead32dae8fc75b15734c41d8bcd4613a21.json"
+    },
+    {
+      "id": "qwen3-vl-30b",
+      "model_id": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "label": "Qwen3 VL 30B",
+      "input_weight_bps": 2728,
+      "key_ttl_sec": 86400,
+      "compose_hashes": [
+        "e8416a02d6f7ce47baaa52e3925b934fd30834b04fc9086b363db9b1d12c729d"
+      ],
+      "evidence": "deployments/evidence/7bd7f374af19b10756efda5b360e43f016b4bc917b0b4e00c6855d41eec9b2d5.json"
+    },
+    {
+      "id": "qwen3.6-35b",
+      "model_id": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "label": "Qwen3.6 35B",
+      "input_weight_bps": 1546,
+      "key_ttl_sec": 86400,
+      "compose_hashes": [
+        "e8416a02d6f7ce47baaa52e3925b934fd30834b04fc9086b363db9b1d12c729d"
+      ],
+      "evidence": "deployments/evidence/e9b255096ba8d1b0da149b5a0f9effd2129ee36afc9340279cba97dea263275b.json"
+    },
+    {
+      "id": "deepseek-v4.1-flash",
+      "model_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "label": "DeepSeek V4.1 Flash",
+      "input_weight_bps": 2500,
+      "key_ttl_sec": 86400,
+      "compose_hashes": [
+        "c53e254e8b70aa14b45ba3043730a0736ca2afb1df7fa3db9c61578845e470fe",
+        "448683dd83e50727b9c5f6cdc84bd9d93fcf2c888001a85b1ba32f76b3612e3e"
+      ],
+      "evidence": "deployments/evidence/809c65e407bde75e64ef1408a4a7fd8d5956f93bec328c273383953d3fadd764.json"
+    },
+    {
+      "id": "qwen3.8-27b",
+      "model_id": "Qwen/Qwen3.8-27B",
+      "label": "Qwen3.8 27B",
+      "input_weight_bps": 297,
+      "key_ttl_sec": 86400,
+      "compose_hashes": [
+        "e8416a02d6f7ce47baaa52e3925b934fd30834b04fc9086b363db9b1d12c729d"
+      ],
+      "evidence": "deployments/evidence/d6308e691e92449ac6b1f2805f4bf2becc65f6939f17c9ca267c9f39afdf5884.json"
     }
   ],
   "series": [
@@ -27,6 +82,38 @@
       "model_id": "z-ai/glm-5.3-flash",
       "endpoint": "http://127.0.0.1:8787",
       "price_per_barrel": "600000",
+      "window_end": 1798675200
+    },
+    {
+      "id": 2,
+      "grade_id": "qwen3-vl-30b",
+      "model_id": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "660000",
+      "window_end": 1798675200
+    },
+    {
+      "id": 3,
+      "grade_id": "qwen3.6-35b",
+      "model_id": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "1320000",
+      "window_end": 1798675200
+    },
+    {
+      "id": 4,
+      "grade_id": "deepseek-v4.1-flash",
+      "model_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "1440000",
+      "window_end": 1798675200
+    },
+    {
+      "id": 5,
+      "grade_id": "qwen3.8-27b",
+      "model_id": "Qwen/Qwen3.8-27B",
+      "endpoint": "http://127.0.0.1:8787",
+      "price_per_barrel": "1620000",
       "window_end": 1798675200
     }
   ],

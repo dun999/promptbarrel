@@ -57,6 +57,26 @@ export async function view(method, args = {}, contract = deployment.contract) {
   return JSON.parse(new TextDecoder().decode(new Uint8Array(json.result.result)));
 }
 
+/**
+ * How many full-access keys an account holds. A contract account with none can
+ * only change through its own methods, so its timelock really binds.
+ */
+export async function fullAccessKeys(accountId = deployment.contract) {
+  const res = await fetch(deployment.rpc, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "barrel",
+      method: "query",
+      params: { request_type: "view_access_key_list", finality: "final", account_id: accountId },
+    }),
+  });
+  const json = await res.json();
+  if (json.error || json.result?.error) throw new Error(String(json.result?.error ?? json.error?.message ?? "RPC error"));
+  return json.result.keys.filter((k) => k.access_key.permission === "FullAccess").length;
+}
+
 /** Everything the pages show, in one round of parallel view calls. */
 export async function readState() {
   const [escrow, count, recent, grades, series, config] = await Promise.all([

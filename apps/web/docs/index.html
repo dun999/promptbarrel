@@ -42,8 +42,8 @@
       <div class="note-b" id="d-version" hidden><span class="cap">First contract</span><p>The contract this page reads is the first version: one model, keys registered by the owner, plaintext prompts, and no claims, firm series, key-owned tanks or timelock yet. This page describes the current code, which the next deployment brings.</p></div>
     </div>
     <dl class="dtop-r">
-      <div class="fact"><dt class="cap">Contract</dt><dd class="mono"><a class="link" data-d-link="contract" href="https://nearblocks.io/address/barrel-v1.promptbarrel.near" target="_blank" rel="noopener"><span data-d="contract">barrel-v1.promptbarrel.near</span></a></dd></div>
-      <div class="fact"><dt class="cap">Models</dt><dd><b class="pixel num" data-d="models">1</b> attested</dd></div>
+      <div class="fact"><dt class="cap">Contract</dt><dd class="mono"><a class="link" data-d-link="contract" href="https://nearblocks.io/address/barrel-v2.promptbarrel.near" target="_blank" rel="noopener"><span data-d="contract">barrel-v2.promptbarrel.near</span></a></dd></div>
+      <div class="fact"><dt class="cap">Models</dt><dd><b class="pixel num" data-d="models">5</b> attested</dd></div>
       <div class="fact"><dt class="cap">From, per Barrel</dt><dd><b class="pixel num" data-d="price-from">0.60</b> <span data-d="unit">USDC</span></dd></div>
       <div class="fact"><dt class="cap">Escrow held now</dt><dd><b class="pixel num" data-d="escrow">–</b> <span data-d="unit">USDC</span></dd></div>
     </dl>
@@ -245,7 +245,7 @@ pnpm barrel unsell 1 --account seller.near</pre></div>
       <p><code>apps/mcp</code> is an MCP server over stdio that gives an agent one tank. The agent holds only the tank's spend key, so the most it can do is spend the tank on answers that carry a valid model signature. With a tank filled in the app, use the command it shows:</p>
       <div class="code"><button class="icon-btn" type="button" aria-label="Copy"><svg><use href="../assets/img/icons.svg#copy"/></svg></button><pre>claude mcp add barrel \
   -e BARREL_NETWORK=<span data-d="network">mainnet</span> \
-  -e BARREL_CONTRACT=<span data-d="contract">barrel-v1.promptbarrel.near</span> \
+  -e BARREL_CONTRACT=<span data-d="contract">barrel-v2.promptbarrel.near</span> \
   -e BARREL_TANK=&lt;tank id&gt; \
   -e BARREL_TANK_KEY=&lt;spend key&gt; \
   -- node /path/to/barrel/apps/mcp/bin/barrel-mcp.mjs</pre></div>
@@ -489,7 +489,7 @@ pnpm barrel register glm-5.3-flash       # register on chain, as anyone</pre></d
 
     <section class="ds" id="changes">
       <header class="ds-head"><span class="n pixel">20</span><h2>Changes and upgrades</h2></header>
-      <p>Nothing that moves trust changes at once. A new owner, a new attestor, or new code is first announced with <code>propose(kind, value)</code>, visible to everyone through <code>get_pending</code>, and applies only after the timelock (<span data-d="timelock">24 hours</span>) through <code>apply</code>, which anyone can call. New code is announced by its SHA-256; <code>upgrade</code> accepts only the exact bytes. A guardian, if set, can pause and cancel a pending change but can do nothing else. <code>renounce_key_registration</code> removes the owner's power to register keys for good, once an attestor is in place.</p>
+      <p>Nothing that moves trust changes at once. A new owner, a new attestor, or new code is first announced with <code>propose(kind, value)</code>, visible to everyone through <code>get_pending</code>, and applies only after the timelock (<span data-d="timelock">24 hours</span>) through <code>apply</code>, which anyone can call. New code is announced by its SHA-256; <code>upgrade</code> accepts only the exact bytes. A guardian, if set, can pause and cancel a pending change but can do nothing else. <code>renounce_key_registration</code> removes the owner's power to register keys for good, once an attestor is in place. The timelock binds the contract's own methods; a full-access key on the contract account could still replace the code directly, until that key is removed. NEAR's <code>view_access_key_list</code> on the contract account shows whether one is left.</p>
     </section>
 
     <!-- ── Operate ─────────────────────────────────────────────────────── -->
@@ -500,7 +500,7 @@ pnpm barrel register glm-5.3-flash       # register on chain, as anyone</pre></d
       <p>The operator runs one Pump for all its series. It needs the operator account's key in <code>.barrel/mainnet/</code> and a NEAR AI Cloud API key as <code>NEARAI_API_KEY</code> in <code>.env</code>.</p>
       <div class="code"><button class="icon-btn" type="button" aria-label="Copy"><svg><use href="../assets/img/icons.svg#copy"/></svg></button><pre># serve it behind TLS at a public https:// address
 PUMP_HOST=0.0.0.0 PUMP_PORT=8787 PUMP_PUBLIC_URL=https://pump.example.com pnpm pump</pre></div>
-      <p>A browser reaches a Pump only over HTTPS, or on its own machine, so each series must point at a public HTTPS address before anyone else can ask. The operator (<span class="mono" data-d="operator">op-v1.promptbarrel.near</span>) moves it by calling <code>set_series_endpoint</code> on the contract, <code>Barrel.setSeriesEndpoint</code> in <code>packages/sdk</code>. The endpoint only says where to ask; the payment rules do not change with it.</p>
+      <p>A browser reaches a Pump only over HTTPS, or on its own machine, so each series must point at a public HTTPS address before anyone else can ask. The operator (<span class="mono" data-d="operator">op-v2.promptbarrel.near</span>) moves it by calling <code>set_series_endpoint</code> on the contract, <code>Barrel.setSeriesEndpoint</code> in <code>packages/sdk</code>. The endpoint only says where to ask; the payment rules do not change with it.</p>
       <table class="dtab">
         <thead><tr><th>Variable</th><th>Default</th><th>Meaning</th></tr></thead>
         <tbody>
@@ -528,16 +528,16 @@ PUMP_HOST=0.0.0.0 PUMP_PORT=8787 PUMP_PUBLIC_URL=https://pump.example.com pnpm p
         <div><span class="cap">Answers settled</span><span class="status" id="lv-count"><i class="dot"></i>Reading…</span></div>
       </div>
       <dl class="dl">
-        <div><dt>Contract</dt><dd class="mono"><a class="link" data-d-link="contract" href="https://nearblocks.io/address/barrel-v1.promptbarrel.near" target="_blank" rel="noopener"><span data-d="contract">barrel-v1.promptbarrel.near</span></a></dd></div>
-        <div><dt>Attestor</dt><dd class="mono" data-d="attestor">none: the owner registers keys</dd></div>
+        <div><dt>Contract</dt><dd class="mono"><a class="link" data-d-link="contract" href="https://nearblocks.io/address/barrel-v2.promptbarrel.near" target="_blank" rel="noopener"><span data-d="contract">barrel-v2.promptbarrel.near</span></a></dd></div>
+        <div><dt>Attestor</dt><dd class="mono" data-d="attestor">attestor-v2.promptbarrel.near</dd></div>
         <div><dt>Owner</dt><dd class="mono" data-d="owner">promptbarrel.near</dd></div>
-        <div><dt>Operator</dt><dd class="mono" data-d="operator">op-v1.promptbarrel.near</dd></div>
+        <div><dt>Operator</dt><dd class="mono" data-d="operator">op-v2.promptbarrel.near</dd></div>
         <div><dt>Stablecoin</dt><dd><span id="dep-coin">Circle's USDC on NEAR</span>, <span class="mono" data-d="usdc-short">17208628…33a1</span></dd></div>
-        <div><dt>Models</dt><dd><span data-d="models">1</span> series; see <a class="link" href="#pricing">Models and pricing</a></dd></div>
+        <div><dt>Models</dt><dd><span data-d="models">5</span> series; see <a class="link" href="#pricing">Models and pricing</a></dd></div>
         <div><dt>Series 1 Pump</dt><dd class="mono" data-d="endpoint">http://127.0.0.1:8787</dd></div>
         <div><dt>Caps</dt><dd><span data-d="cap-escrow">50</span> <span data-d="unit">USDC</span> of escrow in total; <span data-d="cap-series">100</span> Barrels per series</dd></div>
         <div><dt>Delays</dt><dd>Unlock <span data-d="unlock">10 minutes</span>; settle grace <span data-d="grace">1 hour</span></dd></div>
-        <div><dt>WASM SHA-256</dt><dd class="mono" data-d="wasm">cb64709a…4aa6</dd></div>
+        <div><dt>WASM SHA-256</dt><dd class="mono" data-d="wasm">e00f107b…cf6d</dd></div>
       </dl>
       <p>Recorded in <code>deployments/mainnet.json</code>, which the Pump, the CLI, the MCP server and these pages read. The values above are re-read from the contract when this page loads.</p>
       <h3>Testnet, for development</h3>
@@ -553,7 +553,7 @@ PUMP_HOST=0.0.0.0 PUMP_PORT=8787 PUMP_PUBLIC_URL=https://pump.example.com pnpm p
         <div><b>GPU evidence</b><p>NVIDIA GPU evidence is not checked yet. Guarantees rest on Intel TDX and NVIDIA confidential-computing assumptions.</p></div>
         <div><b>Prompt privacy</b><p>Ask privately and the Pump relays ciphertext. It still sees token counts, timing and which tank asked. Without it, the Pump sees plaintext.</p></div>
         <div><b>Availability</b><p>An operator can refuse to serve. The money stays safe either way; on a firm series, every unanswered forced request is paid from the bond, and a default opens refunds at once.</p></div>
-        <div><b>Real money, low caps</b><p>Mainnet escrow is capped at <span data-d="cap-escrow">50</span> USDC in total while the contract is new. Code and owner changes wait out a public timelock.</p></div>
+        <div><b>Real money, low caps</b><p>Mainnet escrow is capped at <span data-d="cap-escrow">50</span> USDC in total while the contract is new. Code and owner changes go through a public timelock, though the deploy key keeps full access to the contract account until it is removed.</p></div>
       </div>
     </section>
 
@@ -561,9 +561,9 @@ PUMP_HOST=0.0.0.0 PUMP_PORT=8787 PUMP_PUBLIC_URL=https://pump.example.com pnpm p
       <header class="ds-head"><span class="n pixel">24</span><h2>Roadmap</h2></header>
       <ol class="road">
         <li class="on"><span class="n pixel">1</span><div><b>Proof</b><span class="status"><i class="dot ok"></i>Live on mainnet</span><p>The loop on this page: paid on proof, job tanks, refunds.</p></div></li>
-        <li class="on"><span class="n pixel">2</span><div><b>Reach</b><span class="status"><i class="dot ok"></i>Built, on testnet</span><p>Pay from another chain through NEAR Intents 1Click; tanks owned by a key, funded through HTTP 402 offers; resale inside <code>intents.near</code>; claims for unacknowledged answers.</p></div></li>
-        <li class="on"><span class="n pixel">3</span><div><b>Trustless</b><span class="status"><i class="dot ok"></i>Built, on testnet</span><p>On-chain attestation so anyone can register a key; prompts encrypted to the model; timelocked changes and upgrades.</p></div></li>
-        <li class="on"><span class="n pixel">4</span><div><b>Market</b><span class="status"><i class="dot ok"></i>Built, on testnet</span><p>Every NEAR-attested model as its own series; firm series with operator bonds, forced requests and canaries; a settlement price index. A second inference supplier is not in scope.</p></div></li>
+        <li class="on"><span class="n pixel">2</span><div><b>Reach</b><span class="status"><i class="dot ok"></i>Live on mainnet</span><p>Pay from another chain through NEAR Intents 1Click; tanks owned by a key, funded through HTTP 402 offers; resale inside <code>intents.near</code>; claims for unacknowledged answers.</p></div></li>
+        <li class="on"><span class="n pixel">3</span><div><b>Trustless</b><span class="status"><i class="dot ok"></i>Live on mainnet</span><p>On-chain attestation so anyone can register a key; prompts encrypted to the model; timelocked changes and upgrades.</p></div></li>
+        <li class="on"><span class="n pixel">4</span><div><b>Market</b><span class="status"><i class="dot ok"></i>Live on mainnet</span><p>Every NEAR-attested model as its own series; firm series with operator bonds, forced requests and canaries; a settlement price index. Firm series are built and tested on testnet; the mainnet series start without a bond. A second inference supplier is not in scope.</p></div></li>
       </ol>
     </section>
 
@@ -583,7 +583,7 @@ PUMP_HOST=0.0.0.0 PUMP_PORT=8787 PUMP_PUBLIC_URL=https://pump.example.com pnpm p
         <p class="small">AI credits with proof of which model ran, or the money back.</p>
       </div>
       <nav class="foot-col" aria-label="Product"><span class="cap">Product</span><a href="../#how">How it works</a><a href="../#faq">FAQ</a><a href="./">Docs</a></nav>
-      <nav class="foot-col" aria-label="Proof"><span class="cap">Proof</span><a data-d-link="contract" href="https://nearblocks.io/address/barrel-v1.promptbarrel.near" target="_blank" rel="noopener">Contract on NearBlocks</a><a href="../app/#escrow">Live escrow</a><a href="../app/#verify">Verify a receipt</a></nav>
+      <nav class="foot-col" aria-label="Proof"><span class="cap">Proof</span><a data-d-link="contract" href="https://nearblocks.io/address/barrel-v2.promptbarrel.near" target="_blank" rel="noopener">Contract on NearBlocks</a><a href="../app/#escrow">Live escrow</a><a href="../app/#verify">Verify a receipt</a></nav>
       <nav class="foot-col" aria-label="Built on"><span class="cap">Built on</span><a href="https://near.org" target="_blank" rel="noopener">NEAR Protocol</a><a href="https://cloud.near.ai" target="_blank" rel="noopener">NEAR AI Cloud</a><a href="https://github.com/nearai/nearai-cloud-verifier" target="_blank" rel="noopener">NEAR AI verifier</a></nav>
     </div>
     <div class="foot-bar small"><span>Built for the NEAR hackathon. MIT licence.</span><span id="foot-net">NEAR mainnet. Circle USDC, under low escrow caps.</span></div>
