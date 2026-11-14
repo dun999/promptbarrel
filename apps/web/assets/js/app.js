@@ -2,7 +2,7 @@
 // the connected wallet signs (near.bundle.js). Tank spend keys are made and
 // kept in this browser. No backend of ours sits between you and the contract.
 
-import { $, $$, EXPLORER, deployment, loadDeployment, loadSamples, readState, fullAccessKeys, escrowParts, liveKey, view, usdc, int, barrels, short, utc, ago, span, pct, tween, checkReceipt, readReceipt, tamper, escapeHtml, copyText, icon } from "./chain.js";
+import { $, $$, EXPLORER, deployment, loadDeployment, loadSamples, readState, fullAccessKeys, escrowParts, liveKey, view, usdc, int, barrels, short, utc, ago, span, pct, tween, checkReceipt, readReceipt, tamper, escapeHtml, copyText, icon, rpcUrls } from "./chain.js";
 
 const ROOT = "../";
 const ic = (id, cls = "icon") => icon(id, cls, ROOT);
@@ -806,7 +806,7 @@ $("#ask-form").addEventListener("submit", async (e) => {
   out.innerHTML = `<div class="thinking"><span class="dot live"></span>Asking ${escapeHtml(g.model_id)} through ${escapeHtml(new URL(s.endpoint).host)}. Nothing is paid until its signature checks out.</div>`;
   try {
     const priv = $("#ask-private").checked;
-    const r = await near.ask({ view: (c, m, a) => view(m, a, c), contractId: deployment.contract, tank: t, grade: g, endpoint: s.endpoint, secretKey: secret, question: q, private: priv });
+    const r = await near.ask({ view: (c, m, a) => view(m, a, c), contractId: deployment.contract, tank: t, grade: g, endpoint: s.endpoint, secretKey: secret, question: q, private: priv, maxTokens: 2000 });
     lastAsk = r;
     const cost = (r.units * BigInt(s.price_per_barrel)) / UNITS;
     out.innerHTML = `<div class="answer">${escapeHtml(r.content.trim() || "(no visible answer: the token limit went to reasoning)")}</div>
@@ -1136,6 +1136,7 @@ $("#disconnect").addEventListener("click", async () => { await near?.disconnect(
     near = await import("./near.bundle.js");
     account = await near.initWallet({
       network: deployment.network,
+      rpcUrls: rpcUrls(),
       onChange: async (id) => { account = id; await readMe(); renderUse(); if (id) toast("ok", `Connected ${id}`); },
     });
     const back = near.returnedTx();

@@ -25,10 +25,13 @@ const activeAccount = () => selector?.store.getState().accounts.find((a) => a.ac
 
 export async function initWallet(opts: {
   network: "testnet" | "mainnet";
+  /** RPCs in order of preference; the selector moves on when one fails. */
+  rpcUrls?: string[];
   onChange: (accountId: string | null) => void;
 }): Promise<string | null> {
   selector = await setupWalletSelector({
     network: opts.network,
+    fallbackRpcUrls: opts.rpcUrls,
     modules: [setupMyNearWallet(), setupHotWallet(), setupIntearWallet()],
   });
   let last = activeAccount();

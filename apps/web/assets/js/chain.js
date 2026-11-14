@@ -34,25 +34,51 @@ export async function loadSamples(root = "") {
   return { sample, gateway };
 }
 
+/**
+ * Public RPCs to read the chain through, in order. A free endpoint can throttle
+ * a busy IP (fastnear answers -429); the next one then serves the reads.
+ */
+const FALLBACK_RPC = { mainnet: ["https://near.drpc.org", "https://rpc.shitzuapes.xyz"], testnet: ["https://rpc.testnet.near.org"] };
+export const rpcUrls = () => [...new Set([deployment.rpc, ...(FALLBACK_RPC[deployment.network] ?? [])].filter(Boolean))];
+let rpcIndex = 0;
+const throttled = (json) => /rate limit|too many/i.test(String(json?.error?.message ?? json?.error?.cause?.name ?? "")) || json?.error?.code === -429;
+
+/** One JSON-RPC query, moving to the next RPC (and staying there) if one throttles or fails. */
+async function rpcQuery(params) {
+  const urls = rpcUrls();
+  const start = rpcIndex % urls.length;
+  let last;
+  for (let k = 0; k < urls.length; k++) {
+    const i = (start + k) % urls.length;
+    const url = urls[i];
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "barrel", method: "query", params }),
+      });
+      if (res.status === 429 || res.status >= 500) throw new Error(`RPC ${res.status}`);
+      const json = await res.json();
+      if (!throttled(json)) return json;
+      last = new Error(json.error.message);
+    } catch (e) {
+      last = e;
+    }
+    // Later reads start at the next RPC too (parallel reads agree on it).
+    if (rpcIndex % urls.length === i) rpcIndex = (i + 1) % urls.length;
+  }
+  throw last;
+}
+
 /** Free view call on the Barrel contract, or on `contract` (e.g. the stablecoin). */
 export async function view(method, args = {}, contract = deployment.contract) {
-  const res = await fetch(deployment.rpc, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: "barrel",
-      method: "query",
-      params: {
-        request_type: "call_function",
-        finality: "optimistic",
-        account_id: contract,
-        method_name: method,
-        args_base64: btoa(JSON.stringify(args)),
-      },
-    }),
+  const json = await rpcQuery({
+    request_type: "call_function",
+    finality: "optimistic",
+    account_id: contract,
+    method_name: method,
+    args_base64: btoa(JSON.stringify(args)),
   });
-  const json = await res.json();
   if (json.error || json.result?.error) throw new Error(String(json.result?.error ?? json.error?.cause?.name ?? json.error?.message ?? "RPC error"));
   return JSON.parse(new TextDecoder().decode(new Uint8Array(json.result.result)));
 }
@@ -62,17 +88,7 @@ export async function view(method, args = {}, contract = deployment.contract) {
  * only change through its own methods, so its timelock really binds.
  */
 export async function fullAccessKeys(accountId = deployment.contract) {
-  const res = await fetch(deployment.rpc, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: "barrel",
-      method: "query",
-      params: { request_type: "view_access_key_list", finality: "final", account_id: accountId },
-    }),
-  });
-  const json = await res.json();
+  const json = await rpcQuery({ request_type: "view_access_key_list", finality: "final", account_id: accountId });
   if (json.error || json.result?.error) throw new Error(String(json.result?.error ?? json.error?.message ?? "RPC error"));
   return json.result.keys.filter((k) => k.access_key.permission === "FullAccess").length;
 }

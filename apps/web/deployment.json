@@ -80,7 +80,7 @@
       "id": 1,
       "grade_id": "glm-5.3-flash",
       "model_id": "z-ai/glm-5.3-flash",
-      "endpoint": "http://127.0.0.1:8787",
+      "endpoint": "https://promptbarrel.com/pump",
       "price_per_barrel": "600000",
       "window_end": 1798675200
     },
@@ -88,7 +88,7 @@
       "id": 2,
       "grade_id": "qwen3-vl-30b",
       "model_id": "Qwen/Qwen3-VL-30B-A3B-Instruct",
-      "endpoint": "http://127.0.0.1:8787",
+      "endpoint": "https://promptbarrel.com/pump",
       "price_per_barrel": "660000",
       "window_end": 1798675200
     },
@@ -96,7 +96,7 @@
       "id": 3,
       "grade_id": "qwen3.6-35b",
       "model_id": "Qwen/Qwen3.6-35B-A3B-FP8",
-      "endpoint": "http://127.0.0.1:8787",
+      "endpoint": "https://promptbarrel.com/pump",
       "price_per_barrel": "1320000",
       "window_end": 1798675200
     },
@@ -104,7 +104,7 @@
       "id": 4,
       "grade_id": "deepseek-v4.1-flash",
       "model_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
-      "endpoint": "http://127.0.0.1:8787",
+      "endpoint": "https://promptbarrel.com/pump",
       "price_per_barrel": "1440000",
       "window_end": 1798675200
     },
@@ -112,7 +112,7 @@
       "id": 5,
       "grade_id": "qwen3.8-27b",
       "model_id": "Qwen/Qwen3.8-27B",
-      "endpoint": "http://127.0.0.1:8787",
+      "endpoint": "https://promptbarrel.com/pump",
       "price_per_barrel": "1620000",
       "window_end": 1798675200
     }

@@ -80,7 +80,7 @@ In `/app/`:
 
 `/app/` also shows the escrow split per series, every settled answer, the registered model keys and their time to live, a receipt verifier and the contract config. The landing page `/` reads the contract live and walks through how a payment is proven. `/docs/` documents the whole product and re-reads its numbers from the contract. All pages read the chain from your browser through a public RPC; there is no Barrel backend between you and the contract.
 
-**Who can ask.** A browser can reach a Pump only over HTTPS, or on its own machine. The mainnet series were opened with the endpoint `http://127.0.0.1:8787`, which only the operator's own machine can reach. For anyone else to ask, the operator serves the Pump at a public HTTPS address (`PUMP_HOST`, `PUMP_PORT`, behind TLS) and moves the series there with the contract's `set_series_endpoint`, signed by the operator (`Barrel.setSeriesEndpoint` in `packages/sdk`). Payment rules do not change with the address. The app marks a series whose Pump it cannot reach before you buy, and `/docs/` shows where each series points right now.
+**Who can ask.** A browser can reach a Pump only over HTTPS, or on its own machine. The mainnet Pump runs at `https://promptbarrel.com/pump` (served by Caddy in front of `PUMP_HOST`/`PUMP_PORT`, with `PUMP_PUBLIC_URL` set to that address), and every series points there through the contract's `set_series_endpoint`, signed by the operator (`Barrel.setSeriesEndpoint` in `packages/sdk`). Payment rules do not change with the address. The app marks a series whose Pump it cannot reach before you buy, and `/docs/` shows where each series points right now.
 
 ### From the command line
 
@@ -178,7 +178,7 @@ The Pump answers forced requests and canaries on its own. The contract hashes th
 | Contract | [`barrel-v2.promptbarrel.near`](https://nearblocks.io/address/barrel-v2.promptbarrel.near), owner `promptbarrel.near`, operator `op-v2.promptbarrel.near` |
 | Attestor | [`attestor-v2.promptbarrel.near`](https://nearblocks.io/address/attestor-v2.promptbarrel.near): the only way a model key gets registered; the owner cannot |
 | Stablecoin | Circle's USDC on NEAR (`17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1`) |
-| Series 1–5 | GLM 5.3 Flash 0.60, Qwen3 VL 30B 0.66, Qwen3.6 35B 1.32, DeepSeek V4.1 Flash 1.44, Qwen3.8 27B 1.62 USDC per Barrel; open until 2026-12-31 00:00 UTC; Pump endpoint `http://127.0.0.1:8787` until the operator moves it |
+| Series 1–5 | GLM 5.3 Flash 0.60, Qwen3 VL 30B 0.66, Qwen3.6 35B 1.32, DeepSeek V4.1 Flash 1.44, Qwen3.8 27B 1.62 USDC per Barrel; open until 2026-12-31 00:00 UTC; Pump at `https://promptbarrel.com/pump` |
 | Model keys | Registered on chain through the attestor, time to live 24 hours; a running Pump re-registers a rotated key, and anyone can with `barrel register` |
 | Caps | 50 USDC of escrow in total, 100 Barrels per series, while this is new |
 | Delays | unlock 10 minutes, claim window 5 minutes, settle grace 1 hour, changes 24 hours |

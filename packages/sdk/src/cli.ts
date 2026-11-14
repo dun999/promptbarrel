@@ -13,9 +13,10 @@
 //                                        move Barrels into a tank under a new spend key; with
 //                                        --agent it is a job tank whose leftover pays the agent
 //   barrel accept <tank>                 accept a job tank's work: the leftover goes to the agent
-//   barrel ask <tank|key> "<question>" [--private]
+//   barrel ask <tank|key> "<question>" [--private] [--max-tokens <n>]
 //                                        ask through the series' Pump; pay only with proof.
 //                                        --private: the Pump relays ciphertext it cannot read
+//                                        --max-tokens: the output limit, reasoning included (default 800)
 //   barrel unlock <tank> | withdraw <tank> | refund <series> [units]
 //   barrel models                        the models on offer: price, input weight, index price
 //   barrel key                           a new tank key, for an agent with no NEAR account
@@ -84,6 +85,7 @@ const { values: opts, positionals } = parseArgs({
     to: { type: "string" },
     key: { type: "string" },
     private: { type: "boolean", default: false },
+    "max-tokens": { type: "string" },
     json: { type: "boolean", default: false },
     help: { type: "boolean", short: "h", default: false },
   },
@@ -338,7 +340,7 @@ async function ask(ref: string, question: string): Promise<boolean> {
   let result;
   try {
     // Reasoning models think before answering; "low" keeps short questions short.
-    result = await client.chat({ messages: [{ role: "user", content: question }], max_tokens: 800, reasoning_effort: "low" });
+    result = await client.chat({ messages: [{ role: "user", content: question }], max_tokens: Number(opts["max-tokens"] ?? 800), reasoning_effort: "low" });
   } catch (e) {
     if (!(e instanceof PaymentRequired)) throw e;
     say(`The tank cannot cover this request. The Pump offers:`);
